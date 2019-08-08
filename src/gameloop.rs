@@ -16,7 +16,7 @@ pub enum GameloopCommand {
 /// Variable UPS interpolation gameloop.
 /// 
 /// Skips up to `ups / 12` frames when FPS is less than UPS. Does interpolation when FPS is greater
-/// than UPS. Smoothes frametimes over 5 frames.
+/// than UPS. Smoothes frametimes over 10 frames.
 /// 
 /// If `lockstep` is true, then when FPS is close to UPS (within 2 Hz or 1 millisecond, whichever
 /// is shorter), this will switch to being a lockstep gameloop. This results in more responsive
@@ -25,7 +25,7 @@ pub fn gameloop<G: Game>(el: &mut EventsLoop, game: &mut G, mut ups: f64, lockst
     use std::time::{ Instant, Duration };
 
     let mut prev_time = Instant::now();
-    let mut frametimes = [Duration::new(0, 0); 5];
+    let mut frametimes = [Duration::new(0, 16_666_666); 10];
     let mut alpha = 0.0;
     let mut paused = false;
     let mut low_framerate = false;
@@ -36,7 +36,7 @@ pub fn gameloop<G: Game>(el: &mut EventsLoop, game: &mut G, mut ups: f64, lockst
         frametimes.rotate_left(1);
         prev_time = now;
 
-        let frametime = dbg!(frametimes.iter().sum::<Duration>() / 5);
+        let frametime = frametimes.iter().sum::<Duration>() / 10;
         let frametime = frametime.as_nanos() as f64 / 1_000_000_000.0;
 
         if !paused {

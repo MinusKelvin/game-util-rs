@@ -12,3 +12,4 @@ glutin = "0.21.0"
 rusttype = { version = "0.7.7", features = ["gpu_cache"] }
 image = "0.22.0"
 serde = { version = "1.0.97", features = ["derive"] }
+arrayvec = "0.4.11"
