@@ -2,7 +2,7 @@ use glutin::*;
 
 pub trait Game {
     fn update(&mut self) -> GameloopCommand;
-    fn render(&mut self, alpha: f64, fps: f64);
+    fn render(&mut self, alpha: f64, smooth_delta: f64);
     fn event(&mut self, event: WindowEvent, window: WindowId) -> GameloopCommand;
 }
 
@@ -10,6 +10,7 @@ pub enum GameloopCommand {
     Continue,
     Exit,
     Pause,
+    UnPause,
     ChangeUps(f64)
 }
 
@@ -64,7 +65,7 @@ pub fn gameloop<G: Game>(el: &mut EventsLoop, game: &mut G, mut ups: f64, lockst
             }
         }
 
-        game.render(if low_framerate { 1.0 } else { alpha }, 1.0 / frametime);
+        game.render(if low_framerate { 1.0 } else { alpha }, frametime);
 
         let mut exit = false;
         el.poll_events(|event| match event {
@@ -87,6 +88,10 @@ fn process_command(c: GameloopCommand, paused: &mut bool, ups: &mut f64, alpha: 
     match c {
         GameloopCommand::Pause => {
             *paused = true;
+            false
+        }
+        GameloopCommand::UnPause => {
+            *paused = false;
             false
         }
         GameloopCommand::ChangeUps(new_ups) => {

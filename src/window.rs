@@ -8,6 +8,7 @@ pub fn create_context(
 ) -> (ContextWrapper<PossiblyCurrent, Window>, dpi::LogicalSize) {
     let context = ContextBuilder::new()
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
+        .with_gl_profile(GlProfile::Core)
         .with_multisampling(multisampling)
         .with_vsync(vsync)
         .build_windowed(wb, el)

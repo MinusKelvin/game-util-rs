@@ -19,7 +19,7 @@ impl game_util::Game for Game {
         GameloopCommand::Continue
     }
 
-    fn render(&mut self, alpha: f64, fps: f64) {
+    fn render(&mut self, alpha: f64, smooth_delta: f64) {
         let dpi = self.context.window().get_hidpi_factor();
         self.text.dpi = dpi as f32;
         self.text.screen_size = (self.lsize.width as f32, self.lsize.height as f32);
@@ -27,7 +27,7 @@ impl game_util::Game for Game {
         self.text.draw_text(
             &format!(
                 "FPS: {:.1}\nDrift: {:.3}\nAlpha: {:.1}\nDPI: {:.1}",
-                fps, self.drift, alpha, dpi
+                1.0 / smooth_delta, self.drift, alpha, dpi
             ),
             15.0, 350.0,
             [255; 4], 50.0, 0

@@ -20,6 +20,10 @@ pub struct TextRenderer {
 }
 
 impl TextRenderer {
+    /// Constructor.
+    /// 
+    /// Touches the following OpenGL state:
+    /// - `GL_TEXTURE_2D` binding
     pub fn new() -> TextRenderer {
         let dim = 512;
 
