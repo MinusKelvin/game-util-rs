@@ -7,13 +7,14 @@ pub extern crate rusttype;
 pub extern crate image;
 
 mod gameloop;
-mod glutil;
+pub mod glutil;
 mod text;
+mod tilemap;
 mod window;
 
 pub use gameloop::*;
-pub use glutil::*;
 pub use text::*;
+pub use tilemap::*;
 pub use window::*;
 
 pub mod prelude {
@@ -23,9 +24,12 @@ pub mod prelude {
 
     pub use gl;
     pub use glutin;
+    pub use crate::glutil;
 
     pub type Vec2<T, U=euclid::UnknownUnit> = euclid::Vector2D<T, U>;
     pub type Vec3<T, U=euclid::UnknownUnit> = euclid::Vector3D<T, U>;
     pub type Point2<T, U=euclid::UnknownUnit> = euclid::Point2D<T, U>;
     pub type Point3<T, U=euclid::UnknownUnit> = euclid::Point3D<T, U>;
+    pub type Transform3D<T, Src=euclid::UnknownUnit, Dst=euclid::UnknownUnit> =
+        euclid::Transform3D<T, Src, Dst>;
 }

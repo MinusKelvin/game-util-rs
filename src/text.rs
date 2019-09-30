@@ -10,7 +10,7 @@ pub struct TextRenderer {
     tex: GLuint,
     vbo: GLuint,
     vbo_buf: Vec<TextVertex>,
-    dim: i32,
+    tex_size: i32,
     next_id: usize,
     shader: GLuint,
     proj_loc: GLint,
@@ -25,7 +25,7 @@ impl TextRenderer {
     /// Touches the following OpenGL state:
     /// - `GL_TEXTURE_2D` binding
     pub fn new() -> TextRenderer {
-        let dim = 512;
+        let tex_size = 512;
 
         let mut tex = 0;
         let mut vbo = 0;
@@ -39,13 +39,13 @@ impl TextRenderer {
             gl::GenTextures(1, &mut tex);
             gl::BindTexture(gl::TEXTURE_2D, tex);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
-            cache = allocate(Cache::builder(), dim);
+            cache = allocate(Cache::builder(), tex_size);
 
             shader = crate::glutil::compile_shader_program(
-                include_str!("text-vertex.glsl"),
-                include_str!("text-fragment.glsl")
+                include_str!("shaders/text-vertex.glsl"),
+                include_str!("shaders/text-fragment.glsl")
             ).unwrap();
-            proj_loc = crate::glutil::get_uniform_location(shader, "proj");
+            proj_loc = crate::glutil::get_uniform_location(shader, "proj").unwrap();
         }
 
         TextRenderer {
@@ -54,7 +54,7 @@ impl TextRenderer {
             render_queue: vec![],
             tex, vbo,
             vbo_buf: vec![],
-            dim,
+            tex_size,
             next_id: 0,
             shader,
             proj_loc,
@@ -89,8 +89,8 @@ impl TextRenderer {
                 gl::UNSIGNED_BYTE,
                 data.as_ptr() as *const _
             )) {
-                self.dim *= 2;
-                self.cache = allocate(self.cache.to_builder(), self.dim);
+                self.tex_size *= 2;
+                self.cache = allocate(self.cache.to_builder(), self.tex_size);
                 for (glyph, font_id, _) in self.render_queue.iter().cloned() {
                     self.cache.queue_glyph(font_id, glyph);
                 }
@@ -259,20 +259,32 @@ impl TextRenderer {
             y -= vertical.ascent - vertical.descent + vertical.line_gap;
         }
     }
+
+    /// Deletes used OpenGL state.
+    /// 
+    /// This is not a `Drop` impl because we don't know when the OpenGL context is destroyed when
+    /// the usual game struct is dropped.
+    pub fn delete(self) {
+        unsafe {
+            gl::DeleteTextures(1, &self.tex);
+            gl::DeleteBuffers(1, &self.vbo);
+            gl::DeleteProgram(self.shader)
+        }
+    }
 }
 
-unsafe fn allocate(builder: CacheBuilder, dim: i32) -> Cache<'static> {
+unsafe fn allocate(builder: CacheBuilder, tex_size: i32) -> Cache<'static> {
     gl::TexImage2D(
         gl::TEXTURE_2D,
         0,
         gl::R8 as i32,
-        dim, dim,
+        tex_size, tex_size,
         0,
         gl::RED,
         gl::UNSIGNED_BYTE,
         0 as *const _
     );
-    builder.dimensions(dim as u32, dim as u32).build()
+    builder.dimensions(tex_size as u32, tex_size as u32).build()
 }
 
 fn pick_font<'a>(

@@ -78,7 +78,98 @@ pub fn link_program(shaders: &[GLuint]) -> Result<GLuint, String> {
     }
 }
 
-pub fn get_uniform_location(program: GLuint, name: &str) -> GLint {
+pub fn get_uniform_location(program: GLuint, name: &str) -> Result<GLint, UniformNotFound> {
     let cstr = CString::new(name).unwrap();
-    unsafe { gl::GetUniformLocation(program, cstr.as_ptr()) }
+    let loc = unsafe { gl::GetUniformLocation(program, cstr.as_ptr()) };
+    if loc == -1 {
+        Err(UniformNotFound)
+    } else {
+        Ok(loc)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UniformNotFound;
+
+impl std::fmt::Display for UniformNotFound {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "Uniform not found")
+    }
+}
+
+impl std::error::Error for UniformNotFound {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+/// Convinience function to load RGBA8 textures.
+pub fn load_texture(data: &[u8], format: image::ImageFormat) -> GLuint {
+    let mut tex = 0;
+    unsafe {
+        gl::GenTextures(1, &mut tex);
+        gl::BindTexture(gl::TEXTURE_2D, tex);
+
+        if let image::DynamicImage::ImageRgba8(img) =
+                image::load_from_memory_with_format(data, format).unwrap() {
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA8 as _,
+                img.width() as GLsizei, img.height() as GLsizei,
+                0,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                img.as_ptr() as _
+            );
+        } else {
+            panic!("Not an RGBA8 image");
+        }
+
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+    }
+    tex
+}
+
+pub fn load_texture_array(
+    data: &[u8], format: image::ImageFormat, tiles_wide: u32, tiles_high: u32
+) -> GLuint {
+    use image::GenericImageView;
+    let mut tex = 0;
+    unsafe {
+        gl::GenTextures(1, &mut tex);
+        gl::BindTexture(gl::TEXTURE_2D_ARRAY, tex);
+
+        let img = image::load_from_memory_with_format(data, format).unwrap();
+        let tw = img.width()/tiles_wide;
+        let th = img.height()/tiles_high;
+        let mut data = Vec::with_capacity(4 * (tw*tiles_wide * th*tiles_high) as usize);
+        for ty in 0..tiles_high {
+            for tx in 0..tiles_wide {
+                for y in 0..th {
+                    for x in 0..tw {
+                        let pixel = img.get_pixel(tx*tw+x, ty*th+y);
+                        data.push(pixel[0]);
+                        data.push(pixel[1]);
+                        data.push(pixel[2]);
+                        data.push(pixel[3]);
+                    }
+                }
+            }
+        }
+
+        gl::TexImage3D(
+            gl::TEXTURE_2D_ARRAY,
+            0,
+            gl::RGBA8 as _,
+            tw as _, th as _, (tiles_wide*tiles_high) as _,
+            0,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            data.as_ptr() as _
+        );
+
+        gl::GenerateMipmap(gl::TEXTURE_2D_ARRAY);
+    }
+    tex
 }
