@@ -30,7 +30,7 @@ impl game_util::Game for Game {
                 1.0 / smooth_delta, self.drift, alpha, dpi
             ),
             15.0, 350.0,
-            [255; 4], 50.0, 0
+            [255; 4], 32.0, 0
         );
         self.text.draw_text(
             concat!(
@@ -40,12 +40,12 @@ impl game_util::Game for Game {
                 "(that's \"Hello world!\" in Chinese)"
             ),
             15.0, 160.0,
-            [0, 0, 0, 255], 40.0, 0
+            [0, 0, 0, 255], 28.0, 0
         );
         self.text.draw_text(
-            "24px",
-            8.0, 8.0,
-            [0, 0, 0, 255], 24.0, 0
+            "16px",
+            10.0, 10.0,
+            [0, 0, 0, 255], 16.0, 0
         );
 
         let (width, height): (u32, _) = self.lsize.to_physical(dpi).into();

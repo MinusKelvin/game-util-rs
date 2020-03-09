@@ -4,7 +4,7 @@ use gl::types::*;
 use crate::prelude::*;
 
 pub struct TextRenderer {
-    styles: Vec<Vec<(usize, Font<'static>)>>,
+    styles: Vec<Vec<(usize, Font<'static>, f32)>>,
     cache: gpu_cache::Cache<'static>,
     render_queue: Vec<(PositionedGlyph<'static>, usize, [u8; 4])>,
     tex: GLuint,
@@ -183,13 +183,23 @@ impl TextRenderer {
     }
 
     pub fn add_fallback_font(&mut self, style: usize, font: Font<'static>) {
-        self.styles[style].push((self.next_id, font));
+        if style >= self.styles.len() {
+            panic!("Invalid style {} (there are {} styles)", style, self.styles.len());
+        }
+        let cap_height = font.glyph('N')
+            .scaled(Scale::uniform(1.0))
+            .exact_bounding_box().unwrap()
+            .height();
+        let height = cap_height - font.v_metrics(Scale::uniform(1.0)).descent;
+        self.styles[style].push((self.next_id, font, 1.0 / height));
         self.next_id += 1;
     }
 
     /// Lays out and measures text.
     pub fn layout(&self, text: &str, size: f32, style: usize) -> LaidOutText {
-        let scale = Scale::uniform(size);
+        if style >= self.styles.len() {
+            panic!("Invalid style {} (there are {} styles)", style, self.styles.len());
+        }
 
         let mut prev_glyph = None;
         let mut left_side_bearing = None;
@@ -197,7 +207,8 @@ impl TextRenderer {
         let mut glyphs = vec![];
 
         for chr in text.chars() {
-            let (font_id, font, glyph) = pick_font(&self.styles[style], chr);
+            let (font_id, font, glyph, relative_scale) = pick_font(&self.styles[style], chr);
+            let scale = Scale::uniform(size * relative_scale);
 
             let glyph = glyph.scaled(scale);
             glyphs.push((position, Glyph {
@@ -222,7 +233,9 @@ impl TextRenderer {
         LaidOutText {
             width: position,
             left_side_bearing: left_side_bearing.unwrap_or(0.0),
-            vertical: self.styles[style][0].1.v_metrics(scale),
+            vertical: self.styles[style][0].1.v_metrics(
+                Scale::uniform(size * self.styles[style][0].2)
+            ),
             glyphs
         }
     }
@@ -288,18 +301,18 @@ unsafe fn allocate(builder: CacheBuilder, tex_size: i32) -> Cache<'static> {
 }
 
 fn pick_font<'a>(
-    fonts: &'a [(usize, Font<'static>)],
+    fonts: &'a [(usize, Font<'static>, f32)],
     chr: char
-) -> (usize, &'a Font<'static>, rusttype::Glyph<'static>) {
-    for &(id, ref font) in fonts {
+) -> (usize, &'a Font<'static>, rusttype::Glyph<'static>, f32) {
+    for &(id, ref font, relative_scale) in fonts {
         let glyph = font.glyph(chr);
         if glyph.id().0 != 0 {
-            return (id, font, glyph)
+            return (id, font, glyph, relative_scale)
         }
     }
 
     let first = fonts.first().unwrap();
-    (first.0, &first.1, first.1.glyph(chr))
+    (first.0, &first.1, first.1.glyph(chr), 1.0)
 }
 
 #[repr(C)]

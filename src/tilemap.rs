@@ -17,7 +17,7 @@ impl TilemapRenderer {
     /// Touches the following OpenGL state:
     /// - `GL_TEXTURE_2D` binding
     /// - `GL_UNPACK_ALIGNMENT` pixel store parameter
-    pub fn new(width: usize, height: usize, tiles: &[u16]) -> Self {
+    pub fn new(shader: GLuint, width: usize, height: usize, tiles: &[u16]) -> Self {
         if tiles.len() != width * height {
             panic!(
                 "Improper tile array length of {} for {}x{} tilemap", tiles.len(), width, height
@@ -42,11 +42,6 @@ impl TilemapRenderer {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
         }
-
-        let shader = glutil::compile_shader_program(
-            include_str!("shaders/tilemap-vertex.glsl"),
-            include_str!("shaders/tilemap-fragment.glsl")
-        ).unwrap();
 
         TilemapRenderer {
             width, height, shader, tilemap,
@@ -114,4 +109,11 @@ impl TilemapRenderer {
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
         }
     }
+}
+
+pub fn tilemap_shader() -> GLuint {
+    glutil::compile_shader_program(
+        include_str!("shaders/tilemap-vertex.glsl"),
+        include_str!("shaders/tilemap-fragment.glsl")
+    ).unwrap()
 }
