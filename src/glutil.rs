@@ -146,7 +146,7 @@ pub fn load_texture_array(
         let mut data = Vec::with_capacity(4 * (tw*tiles_wide * th*tiles_high) as usize);
         for ty in 0..tiles_high {
             for tx in 0..tiles_wide {
-                for y in 0..th {
+                for y in (0..th).rev() {
                     for x in 0..tw {
                         let pixel = img.get_pixel(tx*tw+x, ty*th+y);
                         data.push(pixel[0]);
@@ -170,6 +170,9 @@ pub fn load_texture_array(
         );
 
         gl::GenerateMipmap(gl::TEXTURE_2D_ARRAY);
+        
+        gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+        gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
     }
     tex
 }

@@ -12,5 +12,5 @@ void main() {
 
     uint tile = texelFetch(tilemap, ivec2(coord), 0).r;
 
-    color = texture(tileset, vec3(tilespace, float(tile)));
+    color = textureGrad(tileset, vec3(tilespace, float(tile)), dFdx(coord), dFdy(coord));
 }
