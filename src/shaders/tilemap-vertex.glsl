@@ -1,6 +1,7 @@
 #version 330 core
 
 uniform vec2 size;
+uniform vec2 offset;
 uniform mat4 proj;
 
 out vec2 coord;
@@ -15,5 +16,5 @@ void main() {
 
 	vec2 pos = size * COORDS[gl_VertexID];
     gl_Position = proj * vec4(pos, 0.0, 1.0);
-    coord = pos;
+    coord = offset + pos;
 }

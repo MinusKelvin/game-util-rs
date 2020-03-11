@@ -7,6 +7,7 @@ pub struct TilemapRenderer {
     tilemap: GLuint,
     proj_loc: GLint,
     size_loc: GLint,
+    offset_loc: GLint,
     width: usize,
     height: usize,
 }
@@ -46,7 +47,8 @@ impl TilemapRenderer {
         TilemapRenderer {
             width, height, shader, tilemap,
             proj_loc: glutil::get_uniform_location(shader, "proj").unwrap(),
-            size_loc: glutil::get_uniform_location(shader, "size").unwrap()
+            size_loc: glutil::get_uniform_location(shader, "size").unwrap(),
+            offset_loc: glutil::get_uniform_location(shader, "offset").unwrap()
         }
     }
 
@@ -87,25 +89,37 @@ impl TilemapRenderer {
     /// The bottom-left corner of the tilemap is at (0, 0), and the top-right corner is at
     /// (width, height).
     /// 
+    /// See also: `Self::render_section`
+    pub fn render(&self, camera: Transform3D<f32>, tileset: GLuint) {
+        self.render_section(camera, tileset, rect(0.0, 0.0, self.width as f32, self.height as f32))
+    }
+    
+    /// Renders the given section of the tilemap using the given tileset.
+    /// 
+    /// The bottom-left corner of the tilemap section is at (0, 0), and the top-right corner is at
+    /// (rect.width, rect.height).
+    /// 
     /// Touches the following OpenGL state:
     /// - `GL_TEXTURE_2D` binding
     /// - `GL_TEXTURE_2D_ARRAY` binding
-    /// - Active texture
+    /// - Active texture (set to 0)
     /// - Current shader program
-    pub fn render(&self, camera: Transform3D<f32>, tileset: GLuint) {
+    pub fn render_section(&self, camera: Transform3D<f32>, tileset: GLuint, rect: Rect<f32>) {
         unsafe {
             gl::UseProgram(self.shader);
-
+        
             gl::Uniform1i(glutil::get_uniform_location(self.shader, "tileset").unwrap(), 1);
-            gl::Uniform2f(self.size_loc, self.width as f32, self.height as f32);
+            gl::Uniform2f(self.size_loc, rect.size.width, rect.size.height);
+            gl::Uniform2f(self.offset_loc, rect.origin.x, rect.origin.y);
             let camera_matrix = camera.to_row_major_array();
             gl::UniformMatrix4fv(self.proj_loc, 1, gl::FALSE, camera_matrix.as_ptr());
-
+    
+            gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, self.tilemap);
             gl::ActiveTexture(gl::TEXTURE1);
             gl::BindTexture(gl::TEXTURE_2D_ARRAY, tileset);
             gl::ActiveTexture(gl::TEXTURE0);
-
+        
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
         }
     }
