@@ -8,6 +8,7 @@ pub struct TilemapRenderer {
     proj_loc: GLint,
     size_loc: GLint,
     offset_loc: GLint,
+    tilemap_size_loc: GLint,
     width: usize,
     height: usize,
 }
@@ -48,7 +49,8 @@ impl TilemapRenderer {
             width, height, shader, tilemap,
             proj_loc: glutil::get_uniform_location(shader, "proj").unwrap(),
             size_loc: glutil::get_uniform_location(shader, "size").unwrap(),
-            offset_loc: glutil::get_uniform_location(shader, "offset").unwrap()
+            offset_loc: glutil::get_uniform_location(shader, "offset").unwrap(),
+            tilemap_size_loc: glutil::get_uniform_location(shader, "tilemapSize").unwrap()
         }
     }
 
@@ -111,6 +113,7 @@ impl TilemapRenderer {
             gl::Uniform1i(glutil::get_uniform_location(self.shader, "tileset").unwrap(), 1);
             gl::Uniform2f(self.size_loc, rect.size.width, rect.size.height);
             gl::Uniform2f(self.offset_loc, rect.origin.x, rect.origin.y);
+            gl::Uniform2i(self.tilemap_size_loc, self.width as i32, self.height as i32);
             let camera_matrix = camera.to_row_major_array();
             gl::UniformMatrix4fv(self.proj_loc, 1, gl::FALSE, camera_matrix.as_ptr());
     
