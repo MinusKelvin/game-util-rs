@@ -128,6 +128,14 @@ impl TilemapRenderer {
     }
 }
 
+impl Drop for TilemapRenderer {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteTextures(1, &self.tilemap);
+        }
+    }
+}
+
 pub fn tilemap_shader() -> GLuint {
     glutil::compile_shader_program(
         include_str!("shaders/tilemap-vertex.glsl"),

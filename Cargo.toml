@@ -10,6 +10,6 @@ euclid = { version = "0.20.1", features = ["serde"] }
 gl = "0.13.0"
 glutin = "0.21.0"
 rusttype = { version = "0.7.7", features = ["gpu_cache"] }
-image = "0.22.0"
+image = "0.23"
 serde = { version = "1.0.97", features = ["derive"] }
 arrayvec = "0.4.11"

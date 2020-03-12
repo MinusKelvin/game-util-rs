@@ -272,12 +272,10 @@ impl TextRenderer {
             y -= vertical.ascent - vertical.descent + vertical.line_gap;
         }
     }
+}
 
-    /// Deletes used OpenGL state.
-    /// 
-    /// This is not a `Drop` impl because we don't know when the OpenGL context is destroyed when
-    /// the usual game struct is dropped.
-    pub fn delete(self) {
+impl Drop for TextRenderer {
+    fn drop(&mut self) {
         unsafe {
             gl::DeleteTextures(1, &self.tex);
             gl::DeleteBuffers(1, &self.vbo);
