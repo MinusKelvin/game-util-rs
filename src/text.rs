@@ -272,6 +272,25 @@ impl TextRenderer {
             y -= vertical.ascent - vertical.descent + vertical.line_gap;
         }
     }
+
+    pub fn draw_text_centered(
+        &mut self,
+        text: &str,
+        x: f32, mut y: f32,
+        color: [u8; 4], size: f32, style: usize
+    ) {
+        for line in text.lines() {
+            let LaidOutText {
+                vertical, glyphs, width, ..
+            } = self.layout(line, size, style);
+
+            for (offset, glyph) in glyphs {
+                self.draw_glyph(x + offset - width/2.0, y, color, glyph);
+            }
+
+            y -= vertical.ascent - vertical.descent + vertical.line_gap;
+        }
+    }
 }
 
 impl Drop for TextRenderer {
