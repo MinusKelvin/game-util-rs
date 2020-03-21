@@ -33,21 +33,25 @@ impl SpriteBatch {
     }
     
     fn draw_points(&mut self, sprite: &Sprite, points: [Point2<f32>; 4], color: [u8; 4]) {
+        let bl_tex = sprite.tex.origin + vec2(0.0, sprite.tex.size.height);
+        let tl_tex = sprite.tex.origin + vec2(0.0, 0.0);
+        let br_tex = sprite.tex.origin + vec2(sprite.tex.size.width, sprite.tex.size.height);
+        let tr_tex = sprite.tex.origin + vec2(sprite.tex.size.width, 0.0);
         let bl = SpriteVertex {
             pos: points[0], color,
-            tex: (sprite.tex.origin + vec2(0.0, sprite.tex.size.height)).extend(sprite.layer as f32),
+            tex: if sprite.rotated { tl_tex } else { bl_tex }.extend(sprite.layer as f32),
         };
         let tl = SpriteVertex {
             pos: points[1], color,
-            tex: (sprite.tex.origin + vec2(0.0, 0.0)).extend(sprite.layer as f32),
+            tex: if sprite.rotated { tr_tex } else { tl_tex }.extend(sprite.layer as f32),
         };
         let br = SpriteVertex {
             pos: points[2], color,
-            tex: (sprite.tex.origin + vec2(sprite.tex.size.width, sprite.tex.size.height)).extend(sprite.layer as f32),
+            tex: if sprite.rotated { bl_tex } else { br_tex }.extend(sprite.layer as f32),
         };
         let tr = SpriteVertex {
             pos: points[3], color,
-            tex: (sprite.tex.origin + vec2(sprite.tex.size.width, 0.0)).extend(sprite.layer as f32),
+            tex: if sprite.rotated { br_tex } else { tr_tex }.extend(sprite.layer as f32),
         };
         
         self.buffer.push(bl);

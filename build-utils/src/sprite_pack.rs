@@ -103,13 +103,15 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
                 sprites,
                 "Sprite {{\
                     tex: rect({}.0 / {}.0, {}.0 / {1}.0, {}.0 / {1}.0, {}.0 / {1}.0),\
-                    trimmed_size: size2({3}.0, {4}.0),\
+                    trimmed_size: size2({}.0, {}.0),\
                     real_size: size2({}.0, {}.0),\
                     layer: {}.0,\
                     rotated: {}\
                 }},",
                 data.tex.x, size, data.tex.y,
                 data.tex.w, data.tex.h,
+                if data.rotated { data.tex.h } else { data.tex.w },
+                if data.rotated { data.tex.w } else { data.tex.h },
                 data.real_size.0, data.real_size.1,
                 data.layer,
                 data.rotated
