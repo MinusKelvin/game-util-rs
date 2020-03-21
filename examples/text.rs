@@ -30,6 +30,7 @@ impl game_util::Game for Game {
                 1.0 / smooth_delta, self.drift, alpha, dpi
             ),
             15.0, 350.0,
+            game_util::Alignment::Left,
             [255; 4], 32.0, 0
         );
         self.text.draw_text(
@@ -40,11 +41,13 @@ impl game_util::Game for Game {
                 "(that's \"Hello world!\" in Chinese)"
             ),
             15.0, 160.0,
+            game_util::Alignment::Left,
             [0, 0, 0, 255], 28.0, 0
         );
         self.text.draw_text(
             "16px",
             10.0, 10.0,
+            game_util::Alignment::Left,
             [0, 0, 0, 255], 16.0, 0
         );
 

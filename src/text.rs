@@ -258,25 +258,7 @@ impl TextRenderer {
         &mut self,
         text: &str,
         x: f32, mut y: f32,
-        color: [u8; 4], size: f32, style: usize
-    ) {
-        for line in text.lines() {
-            let LaidOutText {
-                vertical, glyphs, ..
-            } = self.layout(line, size, style);
-
-            for (offset, glyph) in glyphs {
-                self.draw_glyph(x + offset, y, color, glyph);
-            }
-
-            y -= vertical.ascent - vertical.descent + vertical.line_gap;
-        }
-    }
-
-    pub fn draw_text_centered(
-        &mut self,
-        text: &str,
-        x: f32, mut y: f32,
+        alignment: Alignment,
         color: [u8; 4], size: f32, style: usize
     ) {
         for line in text.lines() {
@@ -284,8 +266,14 @@ impl TextRenderer {
                 vertical, glyphs, width, ..
             } = self.layout(line, size, style);
 
+            let x = match alignment {
+                Alignment::Left => x,
+                Alignment::Center => x - width / 2.0,
+                Alignment::Right => x - width,
+            };
+
             for (offset, glyph) in glyphs {
-                self.draw_glyph(x + offset - width/2.0, y, color, glyph);
+                self.draw_glyph(x + offset, y, color, glyph);
             }
 
             y -= vertical.ascent - vertical.descent + vertical.line_gap;
@@ -351,4 +339,9 @@ pub struct LaidOutText {
     pub left_side_bearing: f32,
     pub vertical: VMetrics,
     pub glyphs: Vec<(f32, Glyph)>
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Alignment {
+    Left, Center, Right
 }
