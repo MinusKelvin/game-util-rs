@@ -13,3 +13,4 @@ rusttype = { version = "0.7.7", features = ["gpu_cache"] }
 image = "0.23"
 serde = { version = "1.0.97", features = ["derive"] }
 arrayvec = "0.4.11"
+rodio = "0.11.0"

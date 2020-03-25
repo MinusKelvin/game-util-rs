@@ -5,6 +5,7 @@ pub extern crate lyon;
 pub extern crate euclid;
 pub extern crate rusttype;
 pub extern crate image;
+pub extern crate rodio;
 
 mod gameloop;
 pub mod glutil;
@@ -12,12 +13,14 @@ mod text;
 mod tilemap;
 mod window;
 mod sprite;
+mod sound;
 
 pub use gameloop::*;
 pub use text::*;
 pub use tilemap::*;
 pub use window::*;
 pub use sprite::*;
+pub use sound::*;
 
 pub mod prelude {
     pub use euclid::{ vec2, vec3, point2, point3, rect, size2, size3 };
