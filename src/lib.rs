@@ -1,7 +1,6 @@
 pub extern crate arrayvec;
 pub extern crate glutin;
 pub extern crate gl;
-pub extern crate lyon;
 pub extern crate euclid;
 pub extern crate rusttype;
 pub extern crate image;
