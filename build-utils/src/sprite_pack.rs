@@ -1,7 +1,7 @@
 use std::path::Path;
-use texture_packer::{MultiTexturePacker, TexturePackerConfig, Frame, Rect};
+use texture_packer::{MultiTexturePacker, TexturePackerConfig, Rect};
 use texture_packer::importer::ImageImporter;
-use image::DynamicImage;
+use image::{ RgbaImage, GenericImage };
 use std::collections::HashMap;
 use regex::Regex;
 use std::ops::Deref;
@@ -69,9 +69,11 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
             gl::TexImage3D(gl::TEXTURE_2D_ARRAY, 0, gl::RGBA8 as _, {}, {0}, {}, 0, gl::RGBA, gl::UNSIGNED_BYTE, 0 as *const _);\
             gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);", size, packer.get_pages().len()
     ).unwrap();
-    
+
     for i in 0..packer.get_pages().len() {
-        write!(sprites, "let img = image::load_from_memory_with_format(include_bytes!(\"{}.png\") as &[_], image::ImageFormat::Png).unwrap();", i).unwrap();
+        write!(sprites, "let img = image::load_from_memory_with_format(
+            include_bytes!(\"{}.png\") as &[_], image::ImageFormat::Png
+        ).unwrap();", i).unwrap();
         write!(sprites, "let img = img.as_rgba8().unwrap(); gl::TexSubImage3D(\
                 gl::TEXTURE_2D_ARRAY,\
                 0,\
@@ -82,9 +84,9 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
                 img.as_ptr() as _\
         );", i).unwrap()
     }
-    
+
     write!(sprites, "}} (Sprites {{").unwrap();
-    
+
     for (name, kind) in &entries {
         write!(sprites, "{}: ", name).unwrap();
         match kind {
@@ -97,7 +99,7 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
                 write!(sprites, "],").unwrap();
             }
         }
-        
+
         fn write_sprite(sprites: &mut impl Write, data: &Data, size: u32) {
             write!(
                 sprites,
@@ -118,13 +120,13 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
             ).unwrap();
         }
     }
-    
+
     write!(sprites, "}}, tex)}}}}}}").unwrap();
 }
 
 fn process_dir(
     entries: &mut HashMap<String, Kind>,
-    packer: &mut MultiTexturePacker<DynamicImage>,
+    packer: &mut MultiTexturePacker<RgbaImage>,
     path: &Path,
     field_name: Option<String>
 ) {
@@ -133,8 +135,10 @@ fn process_dir(
         println!("cargo:rerun-if-changed={}", entry.path().display());
         let t = entry.file_type().unwrap();
         let file_name = entry.file_name();
-        let (name, array) = process_name(field_name.as_ref().map(Deref::deref), &file_name.to_string_lossy());
-    
+        let (name, array) = process_name(
+            field_name.as_ref().map(Deref::deref), &file_name.to_string_lossy()
+        );
+
         if t.is_dir() {
             process_dir(entries, packer, &entry.path(), Some(name));
         } else if t.is_file() {
@@ -142,15 +146,8 @@ fn process_dir(
                 Some(i) => format!("{}[{}]", name, i),
                 None => name.clone()
             };
-            packer.pack_own(key.clone(), ImageImporter::import_from_file(&entry.path()).unwrap()).unwrap();
-            let mut frame = None;
-            for (i, page) in packer.get_pages().iter().enumerate() {
-                if let Some(f) = page.get_frame(&key) {
-                    frame = Some((i, f));
-                }
-            }
-            let frame = frame.unwrap();
-        
+            let data = process_img(packer, &key, &entry.path());
+
             if let Some(i) = array {
                 let v = entries.entry(name.clone()).or_insert(Kind::Array(vec![]));
                 match v {
@@ -161,7 +158,7 @@ fn process_dir(
                         if v[i].is_some() {
                             panic!("??? two of the same index?");
                         }
-                        v[i] = Some(Data::from(frame));
+                        v[i] = Some(data);
                     }
                     Kind::Just(_) => panic!("mixing sprite and array of sprites at {}", name)
                 }
@@ -171,7 +168,7 @@ fn process_dir(
                         panic!("there's already a sprite called {}", name);
                     },
                     Entry::Vacant(e) => {
-                        e.insert(Kind::Just(Data::from(frame)));
+                        e.insert(Kind::Just(data));
                     }
                 }
             }
@@ -193,17 +190,6 @@ struct Data {
     rotated: bool,
 }
 
-impl From<(usize, &Frame)> for Data {
-    fn from((layer, frame): (usize, &Frame)) -> Self {
-        Data {
-            tex: frame.frame,
-            real_size: (frame.source.w, frame.source.h),
-            layer,
-            rotated: frame.rotated
-        }
-    }
-}
-
 fn process_name(parent_name: Option<&str>, name: &str) -> (String, Option<usize>) {
     lazy_static::lazy_static! {
         static ref REGEX: Regex = Regex::new(r"^([_a-zA-Z][_\w]*)(?:.(\d+))?\.\w+$").unwrap();
@@ -221,4 +207,110 @@ fn process_name(parent_name: Option<&str>, name: &str) -> (String, Option<usize>
         }
         None => panic!("invalid name: {}", name)
     }
+}
+
+fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Path) -> Data {
+    let mut img = ImageImporter::import_from_file(path).unwrap().to_rgba();
+
+    let width = img.width();
+    let height = img.height();
+
+    let mut add_top_border = false;
+    let mut add_bottom_border = false;
+    for x in 0..width {
+        if img.get_pixel(x, 0).0[3] != 0 {
+            add_top_border = true;
+        }
+        if img.get_pixel(x, height-1).0[3] != 0 {
+            add_bottom_border = true;
+        }
+    }
+
+    let mut add_left_border = false;
+    let mut add_right_border = false;
+    for y in 0..height {
+        if img.get_pixel(0, y).0[3] != 0 {
+            add_left_border = true;
+        }
+        if img.get_pixel(width-1, y).0[3] != 0 {
+            add_right_border = true;
+        }
+    }
+
+    if add_right_border || add_left_border || add_top_border || add_bottom_border {
+        let new_w = add_left_border as u32 + add_right_border as u32 + width;
+        let new_h = add_top_border as u32 + add_bottom_border as u32 + height;
+        let offset_x = add_left_border as u32;
+        let offset_y = add_top_border as u32;
+
+        let base = img;
+        img = RgbaImage::new(new_w, new_h);
+
+        img.copy_from(&base, offset_x, offset_y).unwrap();
+
+        for x in 0..width {
+            if add_top_border {
+                img.put_pixel(offset_x + x, 0, *base.get_pixel(x, 0));
+            }
+            if add_bottom_border {
+                img.put_pixel(offset_x + x, img.height() - 1, *base.get_pixel(x, height-1));
+            }
+        }
+
+        for y in 0..height {
+            if add_left_border {
+                img.put_pixel(0, offset_y + y, *base.get_pixel(0, y));
+            }
+            if add_right_border {
+                img.put_pixel(img.width() - 1, offset_y + y, *base.get_pixel(width-1, y));
+            }
+        }
+
+        if add_left_border && add_top_border {
+            img.put_pixel(0, 0, *base.get_pixel(0, 0));
+        }
+        if add_left_border && add_bottom_border {
+            img.put_pixel(0, img.height()-1, *base.get_pixel(0, height-1));
+        }
+        if add_right_border && add_top_border {
+            img.put_pixel(img.width()-1, 0, *base.get_pixel(width-1, 0));
+        }
+        if add_right_border && add_bottom_border {
+            img.put_pixel(img.width()-1, img.height()-1, *base.get_pixel(width-1, height-1));
+        }
+    }
+
+    packer.pack_own(key.to_string(), img).unwrap();
+    let mut frame = None;
+    for (i, page) in packer.get_pages().iter().enumerate() {
+        if let Some(f) = page.get_frame(&key) {
+            frame = Some((i, f));
+        }
+    }
+    let (layer, frame) = frame.unwrap();
+
+    let mut data = Data {
+        tex: frame.frame,
+        real_size: (width, height),
+        layer,
+        rotated: frame.rotated
+    };
+
+    if add_top_border {
+        data.tex.h -= 1;
+        data.tex.y += 1;
+    }
+    if add_bottom_border {
+        data.tex.h -= 1;
+    }
+
+    if add_left_border {
+        data.tex.w -= 1;
+        data.tex.x += 1;
+    }
+    if add_right_border {
+        data.tex.w -= 1;
+    }
+
+    data
 }
