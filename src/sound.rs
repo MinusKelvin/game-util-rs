@@ -1,19 +1,19 @@
-use rodio::{ Sink, Source, Sample, Decoder, default_output_device };
+use rodio::{ Sink, Source, Sample, Decoder, default_output_device, source::Buffered };
 use std::io::Cursor;
 
 pub struct Sound {
-    bytes: &'static [u8]
+    sound: Buffered<Decoder<Cursor<&'static [u8]>>>
 }
 
 impl Sound {
     pub fn new(bytes: &'static [u8]) -> Sound {
         Sound {
-            bytes
+            sound: Decoder::new(Cursor::new(bytes)).unwrap().buffered()
         }
     }
 
     pub fn sound(&self) -> impl Source<Item=impl Sample + Send> + Send + 'static {
-        Decoder::new(Cursor::new(self.bytes)).unwrap()
+        self.sound.clone()
     }
 
     pub fn play(&self) {
