@@ -5,15 +5,14 @@ pub fn create_context(
     multisampling: u16,
     vsync: bool,
     el: &mut EventsLoop
-) -> (ContextWrapper<PossiblyCurrent, Window>, dpi::LogicalSize) {
+) -> Result<(WindowedContext<PossiblyCurrent>, dpi::LogicalSize), Box<dyn std::error::Error>> {
     let context = ContextBuilder::new()
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
         .with_gl_profile(GlProfile::Core)
         .with_multisampling(multisampling)
         .with_vsync(vsync)
-        .build_windowed(wb, el)
-        .unwrap();
-    let context = unsafe { context.make_current() }.unwrap();
+        .build_windowed(wb, el)?;
+    let context = unsafe { context.make_current() }.map_err(|(_, e)| e)?;
     gl::load_with(|s| context.get_proc_address(s) as *const _);
 
     let mut lsize = None;
@@ -29,7 +28,7 @@ pub fn create_context(
         gl::BindVertexArray(vao);
     }
 
-    (context, lsize.unwrap())
+    Ok((context, lsize.unwrap()))
 }
 
 pub fn clamp_aspect(lsize: dpi::LogicalSize) -> dpi::LogicalSize {

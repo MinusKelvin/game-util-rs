@@ -89,7 +89,7 @@ fn main() {
         WindowBuilder::new(),
         0, true,
         &mut events
-    );
+    ).unwrap();
 
     let mut game = Game {
         context,
