@@ -132,7 +132,7 @@ impl SpriteBatch {
             gl::EnableVertexAttribArray(2);
             
             gl::UseProgram(self.shader);
-            let mat = camera.to_row_major_array();
+            let mat = camera.to_array();
             gl::UniformMatrix4fv(self.proj_loc, 1, gl::FALSE, mat.as_ptr());
             
             gl::DrawArrays(gl::TRIANGLES, 0, self.buffer.len() as i32);

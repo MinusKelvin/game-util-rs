@@ -157,7 +157,7 @@ impl TextRenderer {
                 0.0, self.screen_size.0 * self.dpi,
                 self.screen_size.1 * self.dpi, 0.0,
                 -1.0, 1.0
-            ).to_row_major_array();
+            ).to_array();
             gl::UniformMatrix4fv(self.proj_loc, 1, gl::FALSE, mat.as_ptr());
 
             gl::DrawArrays(gl::TRIANGLES, 0, data.len() as i32);

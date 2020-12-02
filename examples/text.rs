@@ -1,10 +1,13 @@
 use game_util::prelude::*;
 use game_util::GameloopCommand;
 use glutin::*;
+use glutin::event_loop::EventLoop;
+use glutin::event::WindowEvent;
+use glutin::window::{ WindowBuilder, WindowId };
 
 struct Game {
     context: WindowedContext<PossiblyCurrent>,
-    lsize: dpi::LogicalSize,
+    psize: dpi::PhysicalSize<u32>,
     drift: f64,
     counter: f64,
     start: std::time::Instant,
@@ -20,9 +23,10 @@ impl game_util::Game for Game {
     }
 
     fn render(&mut self, alpha: f64, smooth_delta: f64) {
-        let dpi = self.context.window().get_hidpi_factor();
+        let dpi = self.context.window().scale_factor();
+        let lsize = self.psize.to_logical::<f64>(dpi);
         self.text.dpi = dpi as f32;
-        self.text.screen_size = (self.lsize.width as f32, self.lsize.height as f32);
+        self.text.screen_size = (lsize.width as f32, lsize.height as f32);
 
         self.text.draw_text(
             &format!(
@@ -51,11 +55,8 @@ impl game_util::Game for Game {
             [0, 0, 0, 255], 16.0, 0
         );
 
-        let (width, height): (u32, _) = self.lsize.to_physical(dpi).into();
-        let (width, height) = (width as i32, height as i32);
-
         unsafe {
-            gl::Viewport(0, 0, width, height);
+            gl::Viewport(0, 0, self.psize.width as i32, self.psize.height as i32);
 
             gl::ClearColor(0.25, 0.5, 1.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
@@ -73,9 +74,8 @@ impl game_util::Game for Game {
         match event {
             WindowEvent::CloseRequested => return GameloopCommand::Exit,
             WindowEvent::Resized(new_size) => {
-                let psize = new_size.to_physical(self.context.window().get_hidpi_factor());
-                self.context.resize(psize);
-                self.lsize = new_size;
+                self.context.resize(new_size);
+                self.psize = new_size;
             }
             _ => {}
         }
@@ -84,16 +84,16 @@ impl game_util::Game for Game {
 }
 
 fn main() {
-    let mut events = EventsLoop::new();
-    let (context, lsize) = game_util::create_context(
+    let mut events = EventLoop::new();
+    let context = game_util::create_context(
         WindowBuilder::new(),
         0, true,
         &mut events
     ).unwrap();
 
-    let mut game = Game {
+    let game = Game {
+        psize: context.window().inner_size(),
         context,
-        lsize,
         drift: 0.0,
         counter: 0.0,
         start: std::time::Instant::now(),
@@ -101,12 +101,12 @@ fn main() {
             use rusttype::Font;
             let mut t = game_util::TextRenderer::new();
             t.add_style(ArrayVec::from([
-                Font::from_bytes(include_bytes!("NotoSans-Regular.ttf") as &[u8]).unwrap(),
-                Font::from_bytes(include_bytes!("WenQuanYiMicroHei.ttf") as &[u8]).unwrap(),
+                Font::try_from_bytes(include_bytes!("NotoSans-Regular.ttf") as &[u8]).unwrap(),
+                Font::try_from_bytes(include_bytes!("WenQuanYiMicroHei.ttf") as &[u8]).unwrap(),
             ]));
             t
         }
     };
 
-    game_util::gameloop(&mut events, &mut game, 60.0, true);
+    game_util::gameloop(events, game, 60.0, true);
 }

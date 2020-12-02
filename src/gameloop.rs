@@ -1,4 +1,6 @@
-use glutin::*;
+use glutin::event_loop::{ EventLoop, ControlFlow };
+use glutin::event::{ WindowEvent, Event };
+use glutin::window::WindowId;
 
 pub trait Game {
     fn update(&mut self) -> GameloopCommand;
@@ -22,7 +24,12 @@ pub enum GameloopCommand {
 /// If `lockstep` is true, then when FPS is close to UPS (within 2 Hz or 1 millisecond, whichever
 /// is shorter), this will switch to being a lockstep gameloop. This results in more responsive
 /// gameplay at the cost of slight drift over time.
-pub fn gameloop<G: Game>(el: &mut EventsLoop, game: &mut G, mut ups: f64, lockstep: bool) {
+pub fn gameloop<E>(
+    el: EventLoop<E>,
+    mut game: impl Game + 'static,
+    mut ups: f64,
+    lockstep: bool
+) -> ! {
     use std::time::{ Instant, Duration };
 
     let mut prev_time = Instant::now();
@@ -31,57 +38,51 @@ pub fn gameloop<G: Game>(el: &mut EventsLoop, game: &mut G, mut ups: f64, lockst
     let mut paused = false;
     let mut low_framerate = false;
 
-    loop {
-        let now = Instant::now();
-        frametimes[0] = now - prev_time;
-        frametimes.rotate_left(1);
-        prev_time = now;
-
-        let frametime = frametimes.iter().sum::<Duration>() / 10;
-        let frametime = frametime.as_nanos() as f64 / 1_000_000_000.0;
-
-        if !paused {
-            let (lockstep_low, lockstep_high) = lockstep_tolerance(ups);
-
-            let high_framerate = frametime < lockstep_low;
-            low_framerate = frametime > lockstep_high;
-
-            if low_framerate || high_framerate || !lockstep {
-                alpha += frametime * ups;
-            } else {
-                alpha = 2.0;
-            }
-
-            let mut updates = 0;
-            while alpha > 1.0 && !paused {
-                updates += 1;
-                if updates as f64 > ups / 12.0 {
-                    alpha = alpha.min(2.0);
-                }
-                alpha -= 1.0;
-                if process_command(game.update(), &mut paused, &mut ups, &mut alpha) {
-                    return
-                }
+    el.run(move |event, _, flow| match event {
+        Event::WindowEvent { event, window_id } => {
+            let command = game.event(event, window_id);
+            if process_command(command, &mut paused, &mut ups, &mut alpha) {
+                *flow = ControlFlow::Exit;
             }
         }
-
-        game.render(if low_framerate { 1.0 } else { alpha }, frametime);
-
-        let mut exit = false;
-        el.poll_events(|event| match event {
-            Event::WindowEvent { event, window_id } => {
-                let command = game.event(event, window_id);
-                if process_command(command, &mut paused, &mut ups, &mut alpha) {
-                    exit = true;
+        Event::MainEventsCleared => {
+            let now = Instant::now();
+            frametimes[0] = now - prev_time;
+            frametimes.rotate_left(1);
+            prev_time = now;
+    
+            let frametime = frametimes.iter().sum::<Duration>() / 10;
+            let frametime = frametime.as_nanos() as f64 / 1_000_000_000.0;
+    
+            if !paused {
+                let (lockstep_low, lockstep_high) = lockstep_tolerance(ups);
+    
+                let high_framerate = frametime < lockstep_low;
+                low_framerate = frametime > lockstep_high;
+    
+                if low_framerate || high_framerate || !lockstep {
+                    alpha += frametime * ups;
+                } else {
+                    alpha = 2.0;
+                }
+    
+                let mut updates = 0;
+                while alpha > 1.0 && !paused {
+                    updates += 1;
+                    if updates as f64 > ups / 12.0 {
+                        alpha = alpha.min(2.0);
+                    }
+                    alpha -= 1.0;
+                    if process_command(game.update(), &mut paused, &mut ups, &mut alpha) {
+                        return
+                    }
                 }
             }
-            _ => {}
-        });
-
-        if exit {
-            return
+    
+            game.render(if low_framerate { 1.0 } else { alpha }, frametime);
         }
-    }
+        _ => {}
+    })
 }
 
 fn process_command(c: GameloopCommand, paused: &mut bool, ups: &mut f64, alpha: &mut f64) -> bool {

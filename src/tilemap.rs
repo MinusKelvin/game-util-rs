@@ -114,7 +114,7 @@ impl TilemapRenderer {
             gl::Uniform2f(self.size_loc, rect.size.width, rect.size.height);
             gl::Uniform2f(self.offset_loc, rect.origin.x, rect.origin.y);
             gl::Uniform2i(self.tilemap_size_loc, self.width as i32, self.height as i32);
-            let camera_matrix = camera.to_row_major_array();
+            let camera_matrix = camera.to_array();
             gl::UniformMatrix4fv(self.proj_loc, 1, gl::FALSE, camera_matrix.as_ptr());
     
             gl::ActiveTexture(gl::TEXTURE0);
