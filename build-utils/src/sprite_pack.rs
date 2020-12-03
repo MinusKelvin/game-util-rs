@@ -45,11 +45,10 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
         File::create(target.join("sprites.rs")).unwrap()
     );
     
-    write!(sprites, "mod sprites {{\
-        use game_util::Sprite;\
-        use game_util::prelude::*;\
-        use game_util::image;\
-        use gl::types::*;\
+    write!(sprites, "mod sprites {{
+        use game_util::Sprite;
+        use game_util::prelude::*;
+        use game_util::image;
         pub struct Sprites {{").unwrap();
     
     for (name, kind) in &entries {
@@ -61,31 +60,48 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
     
     writeln!(sprites, "}}").unwrap();
     
-    write!(sprites, "impl Sprites {{ pub fn load() -> (Self, GLuint) {{\
-        let mut tex = 0;\
-        unsafe {{\
-            gl::GenTextures(1, &mut tex);\
-            gl::BindTexture(gl::TEXTURE_2D_ARRAY, tex);\
-            gl::TexImage3D(gl::TEXTURE_2D_ARRAY, 0, gl::RGBA8 as _, {}, {0}, {}, 0, gl::RGBA, gl::UNSIGNED_BYTE, 0 as *const _);\
-            gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);", size, packer.get_pages().len()
+    write!(sprites, r#"
+        impl Sprites {{
+            pub fn load(gl: &Gl) -> Result<(Self, glow::Texture), String> {{
+                let tex;
+                unsafe {{
+                    tex = gl.create_texture()?;
+                    gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(tex));
+                    gl.tex_image_3d(
+                        glow::TEXTURE_2D_ARRAY,
+                        0,
+                        glow::RGBA8 as _,
+                        {}, {0}, {},
+                        0,
+                        glow::RGBA,
+                        glow::UNSIGNED_BYTE,
+                        None
+                    );
+                    gl.tex_parameter_i32(
+                        glow::TEXTURE_2D_ARRAY, glow::TEXTURE_MIN_FILTER, glow::LINEAR as _
+                    );
+        "#, size, packer.get_pages().len()
     ).unwrap();
 
     for i in 0..packer.get_pages().len() {
         write!(sprites, "let img = image::load_from_memory_with_format(
             include_bytes!(\"{}.png\") as &[_], image::ImageFormat::Png
         ).unwrap();", i).unwrap();
-        write!(sprites, "let img = img.as_rgba8().unwrap(); gl::TexSubImage3D(\
-                gl::TEXTURE_2D_ARRAY,\
-                0,\
-                0, 0, {},\
-                img.width() as _, img.height() as _, 1,\
-                gl::RGBA,\
-                gl::UNSIGNED_BYTE,\
-                img.as_ptr() as _\
-        );", i).unwrap()
+        write!(sprites, r#"
+            let img = img.as_rgba8().unwrap();
+            gl.tex_sub_image_3d(
+                glow::TEXTURE_2D_ARRAY,
+                0,
+                0, 0, {},
+                img.width() as _, img.height() as _, 1,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::Slice(glutil::as_u8_slice(&img))
+            );
+        "#, i).unwrap()
     }
 
-    write!(sprites, "}} (Sprites {{").unwrap();
+    write!(sprites, "}} Ok((Sprites {{").unwrap();
 
     for (name, kind) in &entries {
         write!(sprites, "{}: ", name).unwrap();
@@ -121,7 +137,7 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
         }
     }
 
-    write!(sprites, "}}, tex)}}}}}}").unwrap();
+    write!(sprites, "}}, tex))}}}}}}").unwrap();
 }
 
 fn process_dir(

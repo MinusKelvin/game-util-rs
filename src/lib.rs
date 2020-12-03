@@ -1,3 +1,9 @@
+pub extern crate arrayvec;
+pub extern crate euclid;
+pub extern crate rusttype;
+pub extern crate image;
+pub extern crate winit;
+
 mod gameloop;
 pub mod glutil;
 mod text;
@@ -8,6 +14,9 @@ cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
         
     } else {
+        pub extern crate glutin;
+        pub extern crate rodio;
+
         pub mod desktop;
         mod sound_rodio;
 
@@ -27,7 +36,6 @@ pub mod prelude {
     pub use glow::HasContext;
 
     pub use glow;
-    pub use winit;
     pub use crate::glutil;
 
     pub type Gl = std::rc::Rc<glow::Context>;
