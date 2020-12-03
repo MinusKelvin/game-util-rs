@@ -1,7 +1,6 @@
 use glutin::window::WindowBuilder;
 use glutin::event_loop::EventLoop;
 use glutin::*;
-use glutin::dpi;
 use crate::prelude::*;
 
 pub fn create_context<E>(
@@ -27,19 +26,4 @@ pub fn create_context<E>(
     }
 
     Ok((context, gl))
-}
-
-pub fn clamp_aspect(lsize: dpi::LogicalSize<f64>) -> dpi::LogicalSize<f64> {
-    let ratio = lsize.width / lsize.height;
-    if ratio > 16.0 / 8.0 {
-        let ratio = 16.0 / 8.0;
-        let w = lsize.height * ratio;
-        dpi::LogicalSize::new(w, lsize.height)
-    } else if ratio < 16.0 / 10.0 {
-        let ratio = 16.0 / 10.0;
-        let h = lsize.width / ratio;
-        dpi::LogicalSize::new(lsize.width, h)
-    } else {
-        lsize
-    }
 }

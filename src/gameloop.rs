@@ -1,6 +1,6 @@
-use glutin::event_loop::{ EventLoop, ControlFlow };
-use glutin::event::{ WindowEvent, Event };
-use glutin::window::WindowId;
+use winit::event_loop::{ EventLoop, ControlFlow };
+use winit::event::{ WindowEvent, Event };
+use winit::window::WindowId;
 
 pub trait Game {
     fn update(&mut self) -> GameloopCommand;

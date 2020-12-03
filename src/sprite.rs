@@ -3,7 +3,7 @@ use crate::prelude::*;
 pub struct SpriteBatch {
     pub pixels_per_unit: f32,
     gl: Gl,
-    shader: glow::Shader,
+    shader: glow::Program,
     proj_loc: glow::UniformLocation,
     tex: glow::Texture,
     vbo: glow::Buffer,
@@ -19,7 +19,7 @@ struct SpriteVertex {
 }
 
 impl SpriteBatch {
-    pub fn new(gl: &Gl, shader: glow::Shader, tex: glow::Shader) -> Result<Self, String> {
+    pub fn new(gl: &Gl, shader: glow::Program, tex: glow::Texture) -> Result<Self, String> {
         let proj_loc = glutil::get_uniform_location(gl, shader, "proj")?;
         let vbo = unsafe { gl.create_buffer()? };
         Ok(SpriteBatch {

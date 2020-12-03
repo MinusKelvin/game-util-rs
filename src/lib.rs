@@ -2,16 +2,23 @@ mod gameloop;
 pub mod glutil;
 mod text;
 mod tilemap;
-mod window;
 mod sprite;
-mod sound;
+
+cfg_if::cfg_if! {
+    if #[cfg(target_arch = "wasm32")] {
+        
+    } else {
+        pub mod desktop;
+        mod sound_rodio;
+
+        pub use sound_rodio::*;
+    }
+}
 
 pub use gameloop::*;
 pub use text::*;
 pub use tilemap::*;
-pub use window::*;
 pub use sprite::*;
-pub use sound::*;
 
 pub mod prelude {
     pub use euclid::{ vec2, vec3, point2, point3, rect, size2, size3 };
@@ -20,7 +27,7 @@ pub mod prelude {
     pub use glow::HasContext;
 
     pub use glow;
-    pub use glutin;
+    pub use winit;
     pub use crate::glutil;
 
     pub type Gl = std::rc::Rc<glow::Context>;

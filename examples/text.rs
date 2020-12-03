@@ -86,7 +86,7 @@ impl game_util::Game for Game {
 
 fn main() {
     let mut events = EventLoop::new();
-    let (context, gl) = game_util::create_context(
+    let (context, gl) = game_util::desktop::create_context(
         WindowBuilder::new(),
         0, true,
         &mut events
