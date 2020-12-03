@@ -1,19 +1,20 @@
 use rusttype::*;
 use rusttype::gpu_cache::*;
-use gl::types::*;
 use crate::prelude::*;
+use scopeguard::ScopeGuard;
 
 pub struct TextRenderer {
+    gl: Gl,
     styles: Vec<Vec<(usize, Font<'static>, f32)>>,
     cache: gpu_cache::Cache<'static>,
     render_queue: Vec<(PositionedGlyph<'static>, usize, [u8; 4])>,
-    tex: GLuint,
-    vbo: GLuint,
+    tex: glow::Texture,
+    vbo: glow::Buffer,
     vbo_buf: Vec<TextVertex>,
     tex_size: i32,
     next_id: usize,
-    shader: GLuint,
-    proj_loc: GLint,
+    shader: glow::Program,
+    proj_loc: glow::UniformLocation,
 
     pub dpi: f32,
     pub screen_size: (f32, f32)
@@ -24,42 +25,49 @@ impl TextRenderer {
     /// 
     /// Touches the following OpenGL state:
     /// - `GL_TEXTURE_2D` binding
-    pub fn new() -> TextRenderer {
-        let tex_size = 512;
-
-        let mut tex = 0;
-        let mut vbo = 0;
-        let cache;
-        let shader;
-        let proj_loc;
-
+    pub fn new(gl: &Gl) -> Result<TextRenderer, String> {
         unsafe {
-            gl::GenBuffers(1, &mut vbo);
+            let tex_size = 512;
 
-            gl::GenTextures(1, &mut tex);
-            gl::BindTexture(gl::TEXTURE_2D, tex);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
-            cache = allocate(Cache::builder(), tex_size);
+            let vbo = scopeguard::guard(
+                gl.create_buffer()?,
+                |buf| gl.delete_buffer(buf)
+            );
 
-            shader = crate::glutil::compile_shader_program(
-                include_str!("shaders/text-vertex.glsl"),
-                include_str!("shaders/text-fragment.glsl")
-            ).unwrap();
-            proj_loc = crate::glutil::get_uniform_location(shader, "proj").unwrap();
-        }
+            let tex = scopeguard::guard(
+                gl.create_texture()?,
+                |tex| gl.delete_texture(tex)
+            );
+            gl.bind_texture(glow::TEXTURE_2D, Some(*tex));
+            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
 
-        TextRenderer {
-            styles: vec![],
-            cache,
-            render_queue: vec![],
-            tex, vbo,
-            vbo_buf: vec![],
-            tex_size,
-            next_id: 0,
-            shader,
-            proj_loc,
-            dpi: 1.0,
-            screen_size: (0.0, 0.0)
+            let cache = allocate(gl, Cache::builder(), tex_size);
+
+            let shader = scopeguard::guard(
+                glutil::compile_shader_program(
+                    gl,
+                    include_str!("shaders/text-vertex.glsl"),
+                    include_str!("shaders/text-fragment.glsl")
+                )?,
+                |shader| gl.delete_program(shader)
+            );
+            let proj_loc = glutil::get_uniform_location(gl, *shader, "proj")?;
+
+            Ok(TextRenderer {
+                gl: gl.clone(),
+                styles: vec![],
+                cache,
+                render_queue: vec![],
+                tex: ScopeGuard::into_inner(tex),
+                vbo: ScopeGuard::into_inner(vbo),
+                vbo_buf: vec![],
+                tex_size,
+                next_id: 0,
+                shader: ScopeGuard::into_inner(shader),
+                proj_loc,
+                dpi: 1.0,
+                screen_size: (0.0, 0.0)
+            })
         }
     }
 
@@ -77,20 +85,21 @@ impl TextRenderer {
         }
 
         unsafe {
-            gl::BindTexture(gl::TEXTURE_2D, self.tex);
-            gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+            self.gl.bind_texture(glow::TEXTURE_2D, Some(self.tex));
+            self.gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
 
-            while let Err(_) = self.cache.cache_queued(|rect, data| gl::TexSubImage2D(
-                gl::TEXTURE_2D,
+            let gl = &self.gl;
+            while let Err(_) = self.cache.cache_queued(|rect, data| gl.tex_sub_image_2d(
+                glow::TEXTURE_2D,
                 0,
                 rect.min.x as i32, rect.min.y as i32,
                 rect.width() as i32, rect.height() as i32,
-                gl::RED,
-                gl::UNSIGNED_BYTE,
-                data.as_ptr() as *const _
+                glow::RED,
+                glow::UNSIGNED_BYTE,
+                glow::PixelUnpackData::Slice(data)
             )) {
                 self.tex_size *= 2;
-                self.cache = allocate(self.cache.to_builder(), self.tex_size);
+                self.cache = allocate(&self.gl, self.cache.to_builder(), self.tex_size);
                 for (glyph, font_id, _) in self.render_queue.iter().cloned() {
                     self.cache.queue_glyph(font_id, glyph);
                 }
@@ -136,35 +145,33 @@ impl TextRenderer {
         }
 
         unsafe {
-            let data: &[TextVertex] = &self.vbo_buf;
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                std::mem::size_of_val(data) as isize,
-                data.as_ptr() as *const _,
-                gl::STREAM_DRAW
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
+            self.gl.buffer_data_u8_slice(
+                glow::ARRAY_BUFFER,
+                glutil::as_u8_slice(&self.vbo_buf),
+                glow::STREAM_DRAW
             );
-            gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 20, 0 as *const _);
-            gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, 20, 8 as *const _);
-            gl::VertexAttribPointer(2, 4, gl::UNSIGNED_BYTE, gl::TRUE, 20, 16 as *const _);
-            gl::EnableVertexAttribArray(0);
-            gl::EnableVertexAttribArray(1);
-            gl::EnableVertexAttribArray(2);
+            self.gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, 20, 0);
+            self.gl.vertex_attrib_pointer_f32(1, 2, glow::FLOAT, false, 20, 8);
+            self.gl.vertex_attrib_pointer_f32(2, 4, glow::UNSIGNED_BYTE, true, 20, 16);
+            self.gl.enable_vertex_attrib_array(0);
+            self.gl.enable_vertex_attrib_array(1);
+            self.gl.enable_vertex_attrib_array(2);
 
-            gl::UseProgram(self.shader);
+            self.gl.use_program(Some(self.shader));
 
             let mat = euclid::default::Transform3D::ortho(
                 0.0, self.screen_size.0 * self.dpi,
                 self.screen_size.1 * self.dpi, 0.0,
                 -1.0, 1.0
             ).to_array();
-            gl::UniformMatrix4fv(self.proj_loc, 1, gl::FALSE, mat.as_ptr());
+            self.gl.uniform_matrix_4_f32_slice(Some(&self.proj_loc), false, &mat);
 
-            gl::DrawArrays(gl::TRIANGLES, 0, data.len() as i32);
+            self.gl.draw_arrays(glow::TRIANGLES, 0, self.vbo_buf.len() as i32);
             
-            gl::DisableVertexAttribArray(0);
-            gl::DisableVertexAttribArray(1);
-            gl::DisableVertexAttribArray(2);
+            self.gl.disable_vertex_attrib_array(0);
+            self.gl.disable_vertex_attrib_array(1);
+            self.gl.disable_vertex_attrib_array(2);
         }
 
         self.render_queue.clear();
@@ -284,23 +291,23 @@ impl TextRenderer {
 impl Drop for TextRenderer {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteTextures(1, &self.tex);
-            gl::DeleteBuffers(1, &self.vbo);
-            gl::DeleteProgram(self.shader)
+            self.gl.delete_texture(self.tex);
+            self.gl.delete_buffer(self.vbo);
+            self.gl.delete_program(self.shader);
         }
     }
 }
 
-unsafe fn allocate(builder: CacheBuilder, tex_size: i32) -> Cache<'static> {
-    gl::TexImage2D(
-        gl::TEXTURE_2D,
+unsafe fn allocate(gl: &Gl, builder: CacheBuilder, tex_size: i32) -> Cache<'static> {
+    gl.tex_image_2d(
+        glow::TEXTURE_2D,
         0,
-        gl::R8 as i32,
+        glow::R8 as i32,
         tex_size, tex_size,
         0,
-        gl::RED,
-        gl::UNSIGNED_BYTE,
-        0 as *const _
+        glow::RED,
+        glow::UNSIGNED_BYTE,
+        None
     );
     builder.dimensions(tex_size as u32, tex_size as u32).build()
 }

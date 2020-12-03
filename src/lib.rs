@@ -1,11 +1,3 @@
-pub extern crate arrayvec;
-pub extern crate glutin;
-pub extern crate gl;
-pub extern crate euclid;
-pub extern crate rusttype;
-pub extern crate image;
-pub extern crate rodio;
-
 mod gameloop;
 pub mod glutil;
 mod text;
@@ -25,10 +17,13 @@ pub mod prelude {
     pub use euclid::{ vec2, vec3, point2, point3, rect, size2, size3 };
     pub use serde::{ Serialize, Deserialize };
     pub use arrayvec::{ ArrayVec, ArrayString };
+    pub use glow::HasContext;
 
-    pub use gl;
+    pub use glow;
     pub use glutin;
     pub use crate::glutil;
+
+    pub type Gl = std::rc::Rc<glow::Context>;
 
     pub type Vec2<T, U=euclid::UnknownUnit> = euclid::Vector2D<T, U>;
     pub type Vec3<T, U=euclid::UnknownUnit> = euclid::Vector3D<T, U>;

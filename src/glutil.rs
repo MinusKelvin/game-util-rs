@@ -1,144 +1,97 @@
-use gl::types::*;
-use std::ffi::CString;
-use std::ptr::null_mut;
+use scopeguard::defer;
+use crate::prelude::*;
 
-/// Compiles and links a shader program, checks for errors, and cleans up intermediate shaders.
-pub fn compile_shader_program(vs_code: &str, fs_code: &str) -> Result<GLuint, String> {
-    let vs = compile_shader(gl::VERTEX_SHADER, vs_code)?;
-    let fs = compile_shader(gl::FRAGMENT_SHADER, fs_code)?;
+pub fn compile_shader_program(
+    gl: &Gl, vs_code: &str, fs_code: &str
+) -> Result<glow::Program, String> {
+    let vs = compile_shader(gl, glow::VERTEX_SHADER, vs_code)?;
+    defer!(unsafe { gl.delete_shader(vs) });
+    let fs = compile_shader(gl, glow::FRAGMENT_SHADER, fs_code)?;
+    defer!(unsafe { gl.delete_shader(fs) });
 
-    let program = link_program(&[vs, fs]);
-
-    unsafe {
-        gl::DeleteShader(vs);
-        gl::DeleteShader(fs);
-    }
-
-    program
+    link_program(gl, &[vs, fs])
 }
 
-/// Compiles a shader and checks for errors.
-pub fn compile_shader(shader_type: GLenum, code: &str) -> Result<GLuint, String> {
+pub fn compile_shader(gl: &Gl, shader_type: u32, code: &str) -> Result<glow::Shader, String> {
     unsafe {
-        let shader = gl::CreateShader(shader_type);
-        gl::ShaderSource(shader, 1, &(code.as_ptr() as *const i8), &(code.len() as i32));
-        gl::CompileShader(shader);
+        let shader = gl.create_shader(shader_type)?;
+        gl.shader_source(shader, code);
+        gl.compile_shader(shader);
 
-        let mut status = 0;
-        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
-        if status == gl::FALSE as i32 {
-            let mut length = 0;
-            gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut length);
-            let mut buffer = Vec::with_capacity(length as usize);
-            gl::GetShaderInfoLog(shader, length, null_mut(), buffer.as_mut_ptr() as *mut i8);
-            buffer.set_len(length as usize);
-            let log = CString::from_vec_unchecked(buffer);
-
-            Err(format!(
-                "Failed to compile {} shader. Info log: {}",
-                match shader_type {
-                    gl::FRAGMENT_SHADER => "fragment",
-                    gl::VERTEX_SHADER => "vertex",
-                    gl::GEOMETRY_SHADER => "geometry",
-                    gl::TESS_CONTROL_SHADER => "tessellation control",
-                    gl::TESS_EVALUATION_SHADER => "tessellation evaluation",
-                    gl::COMPUTE_SHADER => "compute",
-                    _ => "unknown"
-                },
-                log.to_string_lossy()
-            ))
+        if !gl.get_shader_compile_status(shader) {
+            let info_log = gl.get_shader_info_log(shader);
+            gl.delete_shader(shader);
+            Err(info_log)
         } else {
             Ok(shader)
         }
     }
 }
 
-/// Links a shader program and checks for errors.
-pub fn link_program(shaders: &[GLuint]) -> Result<GLuint, String> {
+pub fn link_program(gl: &Gl, shaders: &[glow::Shader]) -> Result<glow::Program, String> {
     unsafe {
-        let program = gl::CreateProgram();
-        for shader in shaders {
-            gl::AttachShader(program, *shader);
+        let program = gl.create_program()?;
+        for &shader in shaders {
+            gl.attach_shader(program, shader);
         }
-        gl::LinkProgram(program);
+        gl.link_program(program);
 
-        let mut status = 0;
-        gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
-        if status == gl::FALSE as i32 {
-            let mut length = 0;
-            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut length);
-            let mut buffer = Vec::with_capacity(length as usize);
-            gl::GetProgramInfoLog(program, length, null_mut(), buffer.as_mut_ptr() as *mut i8);
-            let log = CString::from_vec_unchecked(buffer);
-            
-            Err(format!("Failed to link shader program. Info log: {}", log.to_string_lossy()))
+        if !gl.get_program_link_status(program) {
+            let info_log = gl.get_program_info_log(program);
+            gl.delete_program(program);
+            Err(info_log)
         } else {
             Ok(program)
         }
     }
 }
 
-pub fn get_uniform_location(program: GLuint, name: &str) -> Result<GLint, UniformNotFound> {
-    let cstr = CString::new(name).unwrap();
-    let loc = unsafe { gl::GetUniformLocation(program, cstr.as_ptr()) };
-    if loc == -1 {
-        Err(UniformNotFound)
-    } else {
-        Ok(loc)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct UniformNotFound;
-
-impl std::fmt::Display for UniformNotFound {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(fmt, "Uniform not found")
-    }
-}
-
-impl std::error::Error for UniformNotFound {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
+pub fn get_uniform_location(
+    gl: &Gl, shader: glow::Program, name: &str
+) -> Result<glow::UniformLocation, String> {
+    unsafe { gl.get_uniform_location(shader, name) }.ok_or_else(
+        || format!("Could not find uniform named `{}`.", name)
+    )
 }
 
 /// Convinience function to load RGBA8 textures.
-pub fn load_texture(data: &[u8], format: image::ImageFormat) -> GLuint {
-    let mut tex = 0;
+pub fn load_texture(
+    gl: &glow::Context, data: &[u8], format: image::ImageFormat
+) -> Result<glow::Texture, String> {
     unsafe {
-        gl::GenTextures(1, &mut tex);
-        gl::BindTexture(gl::TEXTURE_2D, tex);
+        let tex = gl.create_texture()?;
+        gl.bind_texture(glow::TEXTURE_2D, Some(tex));
 
-        if let image::DynamicImage::ImageRgba8(img) =
-                image::load_from_memory_with_format(data, format).unwrap() {
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
+        let img = image::load_from_memory_with_format(data, format).unwrap();
+
+        if let image::DynamicImage::ImageRgba8(img) = img {
+            gl.tex_image_2d(
+                glow::TEXTURE_2D,
                 0,
-                gl::RGBA8 as _,
-                img.width() as GLsizei, img.height() as GLsizei,
+                glow::RGBA8 as _,
+                img.width() as i32, img.height() as i32,
                 0,
-                gl::RGBA,
-                gl::UNSIGNED_BYTE,
-                img.as_ptr() as _
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                Some(&img)
             );
         } else {
-            panic!("Not an RGBA8 image");
+            return Err("Not an RGBA image".to_owned());
         }
 
-        gl::GenerateMipmap(gl::TEXTURE_2D);
+        gl.generate_mipmap(glow::TEXTURE_2D);
+
+        Ok(tex)
     }
-    tex
 }
 
 pub fn load_texture_array(
-    data: &[u8], format: image::ImageFormat, tiles_wide: u32, tiles_high: u32
-) -> GLuint {
+    gl: &glow::Context, data: &[u8], format: image::ImageFormat, tiles_wide: u32, tiles_high: u32
+) -> Result<glow::Texture, String> {
     use image::GenericImageView;
-    let mut tex = 0;
     unsafe {
-        gl::GenTextures(1, &mut tex);
-        gl::BindTexture(gl::TEXTURE_2D_ARRAY, tex);
+        let tex = gl.create_texture()?;
+        gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(tex));
 
         let img = image::load_from_memory_with_format(data, format).unwrap();
         let tw = img.width()/tiles_wide;
@@ -158,21 +111,33 @@ pub fn load_texture_array(
             }
         }
 
-        gl::TexImage3D(
-            gl::TEXTURE_2D_ARRAY,
+        gl.tex_image_3d(
+            glow::TEXTURE_2D_ARRAY,
             0,
-            gl::RGBA8 as _,
+            glow::RGBA8 as _,
             tw as _, th as _, (tiles_wide*tiles_high) as _,
             0,
-            gl::RGBA,
-            gl::UNSIGNED_BYTE,
-            data.as_ptr() as _
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            Some(&data)
         );
 
-        gl::GenerateMipmap(gl::TEXTURE_2D_ARRAY);
+        gl.generate_mipmap(glow::TEXTURE_2D_ARRAY);
         
-        gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-        gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D_ARRAY, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D_ARRAY, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32
+        );
+
+        Ok(tex)
     }
-    tex
+}
+
+pub fn as_u8_slice<T>(data: &[T]) -> &[u8] {
+    let size = std::mem::size_of_val(data);
+    unsafe {
+        std::slice::from_raw_parts(data.as_ptr() as *const _, size)
+    }
 }

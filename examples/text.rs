@@ -7,6 +7,7 @@ use glutin::window::{ WindowBuilder, WindowId };
 
 struct Game {
     context: WindowedContext<PossiblyCurrent>,
+    gl: Gl,
     psize: dpi::PhysicalSize<u32>,
     drift: f64,
     counter: f64,
@@ -56,13 +57,13 @@ impl game_util::Game for Game {
         );
 
         unsafe {
-            gl::Viewport(0, 0, self.psize.width as i32, self.psize.height as i32);
+            self.gl.viewport(0, 0, self.psize.width as i32, self.psize.height as i32);
 
-            gl::ClearColor(0.25, 0.5, 1.0, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+            self.gl.clear_color(0.25, 0.5, 1.0, 1.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT);
 
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            self.gl.enable(glow::BLEND);
+            self.gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
         }
 
         self.text.render();
@@ -85,7 +86,7 @@ impl game_util::Game for Game {
 
 fn main() {
     let mut events = EventLoop::new();
-    let context = game_util::create_context(
+    let (context, gl) = game_util::create_context(
         WindowBuilder::new(),
         0, true,
         &mut events
@@ -99,13 +100,14 @@ fn main() {
         start: std::time::Instant::now(),
         text: {
             use rusttype::Font;
-            let mut t = game_util::TextRenderer::new();
+            let mut t = game_util::TextRenderer::new(&gl).unwrap();
             t.add_style(ArrayVec::from([
                 Font::try_from_bytes(include_bytes!("NotoSans-Regular.ttf") as &[u8]).unwrap(),
                 Font::try_from_bytes(include_bytes!("WenQuanYiMicroHei.ttf") as &[u8]).unwrap(),
             ]));
             t
-        }
+        },
+        gl,
     };
 
     game_util::gameloop(events, game, 60.0, true);

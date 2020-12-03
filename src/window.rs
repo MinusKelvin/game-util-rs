@@ -2,13 +2,14 @@ use glutin::window::WindowBuilder;
 use glutin::event_loop::EventLoop;
 use glutin::*;
 use glutin::dpi;
+use crate::prelude::*;
 
 pub fn create_context<E>(
     wb: WindowBuilder,
     multisampling: u16,
     vsync: bool,
     el: &mut EventLoop<E>
-) -> Result<WindowedContext<PossiblyCurrent>, Box<dyn std::error::Error>> {
+) -> Result<(WindowedContext<PossiblyCurrent>, Gl), Box<dyn std::error::Error>> {
     let context = ContextBuilder::new()
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
         .with_gl_profile(GlProfile::Core)
@@ -16,15 +17,16 @@ pub fn create_context<E>(
         .with_vsync(vsync)
         .build_windowed(wb, el)?;
     let context = unsafe { context.make_current() }.map_err(|(_, e)| e)?;
-    gl::load_with(|s| context.get_proc_address(s) as *const _);
+    let gl = std::rc::Rc::new(unsafe {
+        glow::Context::from_loader_function(|s| context.get_proc_address(s))
+    });
 
     unsafe {
-        let mut vao = 0;
-        gl::GenVertexArrays(1, &mut vao);
-        gl::BindVertexArray(vao);
+        let vao = gl.create_vertex_array().unwrap();
+        gl.bind_vertex_array(Some(vao));
     }
 
-    Ok(context)
+    Ok((context, gl))
 }
 
 pub fn clamp_aspect(lsize: dpi::LogicalSize<f64>) -> dpi::LogicalSize<f64> {

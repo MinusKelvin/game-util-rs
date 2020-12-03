@@ -1,12 +1,12 @@
 use crate::prelude::*;
-use gl::types::*;
 
 pub struct SpriteBatch {
     pub pixels_per_unit: f32,
-    shader: GLuint,
-    proj_loc: GLint,
-    tex: GLuint,
-    vbo: GLuint,
+    gl: Gl,
+    shader: glow::Shader,
+    proj_loc: glow::UniformLocation,
+    tex: glow::Texture,
+    vbo: glow::Buffer,
     buffer: Vec<SpriteVertex>
 }
 
@@ -19,17 +19,16 @@ struct SpriteVertex {
 }
 
 impl SpriteBatch {
-    pub fn new(shader: GLuint, tex: GLuint) -> Self {
-        let mut vbo = 0;
-        unsafe {
-            gl::GenBuffers(1, &mut vbo);
-        }
-        SpriteBatch {
+    pub fn new(gl: &Gl, shader: glow::Shader, tex: glow::Shader) -> Result<Self, String> {
+        let proj_loc = glutil::get_uniform_location(gl, shader, "proj")?;
+        let vbo = unsafe { gl.create_buffer()? };
+        Ok(SpriteBatch {
+            gl: gl.clone(),
             pixels_per_unit: 1.0,
             shader, tex, vbo,
-            proj_loc: glutil::get_uniform_location(shader, "proj").unwrap(),
+            proj_loc,
             buffer: vec![]
-        }
+        })
     }
     
     fn draw_points(&mut self, sprite: &Sprite, points: [Point2<f32>; 4], color: [u8; 4]) {
@@ -106,40 +105,38 @@ impl SpriteBatch {
     
     /// Actually draws the queued glyphs.
     /// 
-    /// Touches the following OpenGL state:
+    /// Touches the following Open_GL state:
     /// - `GL_TEXTURE_2D_ARRAY` binding
     /// - `GL_ARRAY_BUFFER` binding
     /// - Current shader program
     /// - Vertex attribute arrays for indices 0, 1, 2
     pub fn render(&mut self, camera: Transform3D<f32>) {
         unsafe {
-            gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.tex);
+            self.gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(self.tex));
             
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-            let data: &[_] = &self.buffer;
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                std::mem::size_of_val(data) as isize,
-                data.as_ptr() as *const _,
-                gl::STREAM_DRAW
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
+            self.gl.buffer_data_u8_slice(
+                glow::ARRAY_BUFFER,
+                glutil::as_u8_slice(&self.buffer),
+                glow::STREAM_DRAW
             );
             
-            gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 24, 0 as *const _);
-            gl::VertexAttribPointer(1, 3, gl::FLOAT, gl::FALSE, 24, 8 as *const _);
-            gl::VertexAttribPointer(2, 4, gl::UNSIGNED_BYTE, gl::TRUE, 24, 20 as *const _);
-            gl::EnableVertexAttribArray(0);
-            gl::EnableVertexAttribArray(1);
-            gl::EnableVertexAttribArray(2);
+            self.gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, 24, 0);
+            self.gl.vertex_attrib_pointer_f32(1, 3, glow::FLOAT, false, 24, 8);
+            self.gl.vertex_attrib_pointer_f32(2, 4, glow::UNSIGNED_BYTE, true, 24, 20);
+            self.gl.enable_vertex_attrib_array(0);
+            self.gl.enable_vertex_attrib_array(1);
+            self.gl.enable_vertex_attrib_array(2);
             
-            gl::UseProgram(self.shader);
+            self.gl.use_program(Some(self.shader));
             let mat = camera.to_array();
-            gl::UniformMatrix4fv(self.proj_loc, 1, gl::FALSE, mat.as_ptr());
+            self.gl.uniform_matrix_4_f32_slice(Some(&self.proj_loc), false, &mat);
             
-            gl::DrawArrays(gl::TRIANGLES, 0, self.buffer.len() as i32);
+            self.gl.draw_arrays(glow::TRIANGLES, 0, self.buffer.len() as i32);
             
-            gl::DisableVertexAttribArray(0);
-            gl::DisableVertexAttribArray(1);
-            gl::DisableVertexAttribArray(2);
+            self.gl.disable_vertex_attrib_array(0);
+            self.gl.disable_vertex_attrib_array(1);
+            self.gl.disable_vertex_attrib_array(2);
         }
         self.buffer.clear();
     }
@@ -148,7 +145,7 @@ impl SpriteBatch {
 impl Drop for SpriteBatch {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteBuffers(1, &self.vbo);
+            self.gl.delete_buffer(self.vbo);
         }
     }
 }
@@ -161,8 +158,9 @@ pub struct Sprite {
     pub rotated: bool
 }
 
-pub fn sprite_shader() -> GLuint {
+pub fn sprite_shader(gl: &Gl) -> glow::Program {
     glutil::compile_shader_program(
+        gl,
         include_str!("shaders/sprite-vertex.glsl"),
         include_str!("shaders/sprite-fragment.glsl")
     ).unwrap()
