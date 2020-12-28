@@ -10,19 +10,9 @@ mod text;
 mod tilemap;
 mod sprite;
 
-cfg_if::cfg_if! {
-    if #[cfg(target_arch = "wasm32")] {
-        
-    } else {
-        pub extern crate glutin;
-        pub extern crate rodio;
-
-        pub mod desktop;
-        mod sound_rodio;
-
-        pub use sound_rodio::*;
-    }
-}
+#[cfg_attr(target_arch = "wasm32", path = "web.rs")]
+#[cfg_attr(not(target_arch = "wasm32"), path = "desktop.rs")]
+pub mod platform;
 
 pub use gameloop::*;
 pub use text::*;
@@ -37,8 +27,7 @@ pub mod prelude {
 
     pub use glow;
     pub use crate::glutil;
-
-    pub type Gl = std::rc::Rc<glow::Context>;
+    pub use crate::glutil::Gl;
 
     pub type Vec2<T, U=euclid::UnknownUnit> = euclid::Vector2D<T, U>;
     pub type Vec3<T, U=euclid::UnknownUnit> = euclid::Vector3D<T, U>;

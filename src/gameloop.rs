@@ -1,11 +1,17 @@
 use winit::event_loop::{ EventLoop, ControlFlow };
-use winit::event::{ WindowEvent, Event };
+use winit::event::{ WindowEvent, Event, StartCause };
 use winit::window::WindowId;
+use instant::{ Instant, Duration };
 
 pub trait Game {
+    type UserEvent;
+
     fn update(&mut self) -> GameloopCommand;
     fn render(&mut self, alpha: f64, smooth_delta: f64);
     fn event(&mut self, event: WindowEvent, window: WindowId) -> GameloopCommand;
+    fn user_event(&mut self, event: Self::UserEvent) -> GameloopCommand;
+
+    fn begin_frame(&mut self) {}
 }
 
 pub enum GameloopCommand {
@@ -24,14 +30,12 @@ pub enum GameloopCommand {
 /// If `lockstep` is true, then when FPS is close to UPS (within 2 Hz or 1 millisecond, whichever
 /// is shorter), this will switch to being a lockstep gameloop. This results in more responsive
 /// gameplay at the cost of slight drift over time.
-pub fn gameloop<E>(
-    el: EventLoop<E>,
-    mut game: impl Game + 'static,
+pub fn gameloop<G: Game + 'static>(
+    el: EventLoop<G::UserEvent>,
+    mut game: G,
     mut ups: f64,
     lockstep: bool
 ) -> ! {
-    use std::time::{ Instant, Duration };
-
     let mut prev_time = Instant::now();
     let mut frametimes = [Duration::new(0, 16_666_666); 10];
     let mut alpha = 0.0;
@@ -39,6 +43,14 @@ pub fn gameloop<E>(
     let mut low_framerate = false;
 
     el.run(move |event, _, flow| match event {
+        Event::NewEvents(StartCause::Poll) => {
+            let now = Instant::now();
+            frametimes[0] = now - prev_time;
+            frametimes.rotate_left(1);
+            prev_time = now;
+
+            game.begin_frame();
+        }
         Event::WindowEvent { event, window_id } => {
             let command = game.event(event, window_id);
             if process_command(command, &mut paused, &mut ups, &mut alpha) {
@@ -46,11 +58,6 @@ pub fn gameloop<E>(
             }
         }
         Event::MainEventsCleared => {
-            let now = Instant::now();
-            frametimes[0] = now - prev_time;
-            frametimes.rotate_left(1);
-            prev_time = now;
-    
             let frametime = frametimes.iter().sum::<Duration>() / 10;
             let frametime = frametime.as_nanos() as f64 / 1_000_000_000.0;
     

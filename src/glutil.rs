@@ -1,6 +1,22 @@
 use scopeguard::defer;
 use crate::prelude::*;
 
+#[derive(Clone)]
+pub struct Gl(std::rc::Rc<glow::Context>);
+
+impl Gl {
+    pub(crate) fn new(gl: glow::Context) -> Self {
+        Gl(std::rc::Rc::new(gl))
+    }
+}
+
+impl std::ops::Deref for Gl {
+    type Target = glow::Context;
+    fn deref(&self) -> &glow::Context {
+        &self.0
+    }
+}
+
 pub fn compile_shader_program(
     gl: &Gl, vs_code: &str, fs_code: &str
 ) -> Result<glow::Program, String> {

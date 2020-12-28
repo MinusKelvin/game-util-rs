@@ -2,12 +2,14 @@ use crate::prelude::*;
 use crate::gameloop::*;
 
 use std::future::Future;
-use futures::task::LocalSpawnExt;
-use futures::executor::{ LocalPool, LocalSpawner };
 use winit::window::{ WindowBuilder, WindowId, Window };
 use winit::event_loop::{ EventLoop, EventLoopProxy };
 use winit::event::WindowEvent;
-use glutin::{Api, GlRequest, PossiblyCurrent, WindowedContext};
+use winit::dpi::LogicalSize;
+use winit::platform::web::WindowExtWebSys;
+use web_sys::HtmlElement;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::spawn_local;
 
 pub fn launch<G, F>(
     wb: WindowBuilder,
@@ -21,45 +23,44 @@ where
 {
     let el = EventLoop::with_user_event();
 
-    let context = glutin::ContextBuilder::new()
-        .with_vsync(true)
-        .with_gl(GlRequest::Specific(Api::OpenGlEs, (3, 0)))
-        .build_windowed(wb, &el)
-        .unwrap();
+    let document = web_sys::window().unwrap().document().unwrap();
+    let container = document.body().unwrap();
+    let window = wb.build(&el).unwrap();
 
-    let context = unsafe { context.make_current() }.unwrap();
+    container.append_with_node_1(&window.canvas()).unwrap();
 
-    let gl = Gl::new(unsafe {
-        glow::Context::from_loader_function(|s| context.get_proc_address(s))
-    });
+    let attributes = js_sys::Object::new();
+    js_sys::Reflect::set(&attributes, &"alpha".into(), &false.into()).unwrap();
+    let gl = Gl::new(glow::Context::from_webgl2_context(
+        window.canvas().get_context_with_context_options("webgl2", &attributes)
+            .unwrap().unwrap().dyn_into().unwrap()
+    ));
 
     unsafe {
         gl.bind_vertex_array(gl.create_vertex_array().ok());
     }
 
-    let mut pool = futures::executor::LocalPool::new();
-    let spawner = LocalExecutor {
-        spawner: pool.spawner()
-    };
+    let game_future = init(&window, gl, el.create_proxy(), LocalExecutor { _private: () });
+    spawn_local(async move {
+        let game = GamePlatformWrapper {
+            game: game_future.await,
+            container,
+            window
+        };
 
-    let game = GamePlatformWrapper {
-        game: pool.run_until(init(context.window(), gl, el.create_proxy(), spawner)),
-        context,
-        pool
-    };
-
-    gameloop(el, game, ups, lockstep);
+        gameloop(el, game, ups, lockstep);
+    });
 }
 
 struct GamePlatformWrapper<G: Game> {
     game: G,
-    context: WindowedContext<PossiblyCurrent>,
-    pool: LocalPool
+    container: HtmlElement,
+    window: Window
 }
 
 #[derive(Clone)]
 pub struct LocalExecutor {
-    spawner: LocalSpawner
+    _private: ()
 }
 
 impl<G: Game> Game for GamePlatformWrapper<G> {
@@ -71,13 +72,9 @@ impl<G: Game> Game for GamePlatformWrapper<G> {
 
     fn render(&mut self, alpha: f64, smooth_delta: f64) {
         self.game.render(alpha, smooth_delta);
-        self.context.swap_buffers().unwrap();
     }
 
     fn event(&mut self, event: WindowEvent, window: WindowId) -> GameloopCommand {
-        if let WindowEvent::Resized(size) = event {
-            self.context.resize(size);
-        }
         self.game.event(event, window)
     }
 
@@ -86,13 +83,16 @@ impl<G: Game> Game for GamePlatformWrapper<G> {
     }
 
     fn begin_frame(&mut self) {
-        self.pool.run_until_stalled();
+        let w = self.container.client_width();
+        let h = self.container.client_height();
+        self.window.set_inner_size(LogicalSize::new(w, h));
+
         self.game.begin_frame()
     }
 }
 
 impl LocalExecutor {
     pub fn spawn(&self, f: impl Future<Output = ()> + 'static) {
-        self.spawner.spawn_local(f).unwrap();
+        spawn_local(f);
     }
 }

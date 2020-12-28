@@ -1,4 +1,5 @@
-#version 330 core
+#version 300 es
+precision lowp float;
 
 in vec3 texcoord;
 in vec4 col;
