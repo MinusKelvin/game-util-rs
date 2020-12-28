@@ -149,7 +149,7 @@ impl Drop for TilemapRenderer {
 pub fn tilemap_shader(gl: &Gl) -> glow::Program {
     glutil::compile_shader_program(
         gl,
-        include_str!("shaders/tilemap-vertex.glsl"),
-        include_str!("shaders/tilemap-fragment.glsl")
+        include_str!("shaders/tilemap.vert.glsl"),
+        include_str!("shaders/tilemap.frag.glsl")
     ).unwrap()
 }

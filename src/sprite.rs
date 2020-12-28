@@ -161,7 +161,7 @@ pub struct Sprite {
 pub fn sprite_shader(gl: &Gl) -> glow::Program {
     glutil::compile_shader_program(
         gl,
-        include_str!("shaders/sprite-vertex.glsl"),
-        include_str!("shaders/sprite-fragment.glsl")
+        include_str!("shaders/sprite.vert.glsl"),
+        include_str!("shaders/sprite.frag.glsl")
     ).unwrap()
 }

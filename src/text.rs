@@ -46,8 +46,8 @@ impl TextRenderer {
             let shader = scopeguard::guard(
                 glutil::compile_shader_program(
                     gl,
-                    include_str!("shaders/text-vertex.glsl"),
-                    include_str!("shaders/text-fragment.glsl")
+                    include_str!("shaders/text.vert.glsl"),
+                    include_str!("shaders/text.frag.glsl")
                 )?,
                 |shader| gl.delete_program(shader)
             );

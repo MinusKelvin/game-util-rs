@@ -81,12 +81,18 @@ pub fn gameloop<G: Game + 'static>(
                     }
                     alpha -= 1.0;
                     if process_command(game.update(), &mut paused, &mut ups, &mut alpha) {
+                        *flow = ControlFlow::Exit;
                         return
                     }
                 }
             }
     
             game.render(if low_framerate { 1.0 } else { alpha }, frametime);
+        }
+        Event::UserEvent(e) => {
+            if process_command(game.user_event(e), &mut paused, &mut ups, &mut alpha) {
+                *flow = ControlFlow::Exit
+            }
         }
         _ => {}
     })

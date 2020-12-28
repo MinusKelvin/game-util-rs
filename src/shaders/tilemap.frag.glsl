@@ -1,5 +1,7 @@
 #version 300 es
-precision highp float;
+precision mediump float;
+precision highp usampler2D;
+precision lowp sampler2DArray;
 
 in vec2 coord;
 

@@ -22,6 +22,7 @@ rodio = "0.11.0"
 futures = "0.3.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+webutil = { git = "https://github.com/MinusKelvin/webutil", rev = "fb24e2b" }
 web-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

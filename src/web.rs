@@ -48,7 +48,7 @@ where
             window
         };
 
-        gameloop(el, game, ups, lockstep);
+        webutil::global::set_timeout(0, move || gameloop(el, game, ups, lockstep)).forget();
     });
 }
 
