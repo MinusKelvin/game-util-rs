@@ -1,9 +1,9 @@
 use game_util::prelude::*;
-use game_util::GameloopCommand;
-use game_util::winit::event::WindowEvent;
-use game_util::winit::window::{ WindowBuilder, WindowId };
-use game_util::winit::dpi::PhysicalSize;
 use game_util::rusttype::Font;
+use game_util::winit::dpi::PhysicalSize;
+use game_util::winit::event::WindowEvent;
+use game_util::winit::window::{WindowBuilder, WindowId};
+use game_util::GameloopCommand;
 use instant::Instant;
 
 struct Game {
@@ -13,7 +13,7 @@ struct Game {
     counter: f64,
     start: Instant,
     dpi: f64,
-    text: game_util::TextRenderer
+    text: game_util::TextRenderer,
 }
 
 impl game_util::Game for Game {
@@ -21,7 +21,7 @@ impl game_util::Game for Game {
 
     fn update(&mut self) -> GameloopCommand {
         let time = Instant::now() - self.start;
-        self.counter += 1.0/60.0;
+        self.counter += 1.0 / 60.0;
         self.drift = self.counter - time.as_secs_f64();
         GameloopCommand::Continue
     }
@@ -34,11 +34,17 @@ impl game_util::Game for Game {
         self.text.draw_text(
             &format!(
                 "FPS: {:.1}\nDrift: {:.3}\nAlpha: {:.1}\nDPI: {:.1}",
-                1.0 / smooth_delta, self.drift, alpha, self.dpi
+                1.0 / smooth_delta,
+                self.drift,
+                alpha,
+                self.dpi
             ),
-            15.0, 350.0,
+            15.0,
+            350.0,
             game_util::Alignment::Left,
-            [255; 4], 32.0, 0
+            [255; 4],
+            32.0,
+            0,
         );
         self.text.draw_text(
             concat!(
@@ -47,32 +53,43 @@ impl game_util::Game for Game {
                 "fallback fonts: 你好，世界！\n",
                 "(that's \"Hello world!\" in Chinese)"
             ),
-            15.0, 160.0,
+            15.0,
+            160.0,
             game_util::Alignment::Left,
-            [0, 0, 0, 255], 28.0, 0
+            [0, 0, 0, 255],
+            28.0,
+            0,
         );
         self.text.draw_text(
             "16px",
-            10.0, 10.0,
+            10.0,
+            10.0,
             game_util::Alignment::Left,
-            [0, 0, 0, 255], 16.0, 0
+            [0, 0, 0, 255],
+            16.0,
+            0,
         );
 
         self.text.draw_text(
             &unsafe { self.gl.get_parameter_string(glow::VERSION) },
-            100.0, 10.0,
+            100.0,
+            10.0,
             game_util::Alignment::Left,
-            [0, 0, 0, 255], 16.0, 0
+            [0, 0, 0, 255],
+            16.0,
+            0,
         );
 
         unsafe {
-            self.gl.viewport(0, 0, self.psize.width as i32, self.psize.height as i32);
+            self.gl
+                .viewport(0, 0, self.psize.width as i32, self.psize.height as i32);
 
             self.gl.clear_color(0.25, 0.5, 1.0, 1.0);
             self.gl.clear(glow::COLOR_BUFFER_BIT);
 
             self.gl.enable(glow::BLEND);
-            self.gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+            self.gl
+                .blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
         }
 
         self.text.render();
@@ -105,7 +122,8 @@ pub fn main() {
         let psize = window.inner_size();
         async move {
             Game {
-                psize, dpi,
+                psize,
+                dpi,
                 drift: 0.0,
                 counter: 0.0,
                 start: Instant::now(),
@@ -119,7 +137,7 @@ pub fn main() {
                     ]));
                     t
                 },
-                gl
+                gl,
             }
         }
     });

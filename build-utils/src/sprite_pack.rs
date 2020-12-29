@@ -1,14 +1,14 @@
-use std::path::Path;
-use texture_packer::{MultiTexturePacker, TexturePackerConfig, Rect};
-use texture_packer::importer::ImageImporter;
-use image::{ RgbaImage, GenericImage };
-use std::collections::HashMap;
+use image::{GenericImage, RgbaImage};
 use regex::Regex;
-use std::ops::Deref;
 use std::collections::hash_map::Entry;
-use texture_packer::exporter::ImageExporter;
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::{ BufWriter, Write };
+use std::io::{BufWriter, Write};
+use std::ops::Deref;
+use std::path::Path;
+use texture_packer::exporter::ImageExporter;
+use texture_packer::importer::ImageImporter;
+use texture_packer::{MultiTexturePacker, Rect, TexturePackerConfig};
 
 pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) {
     let mut packer = MultiTexturePacker::new_skyline(TexturePackerConfig {
@@ -16,51 +16,57 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
         max_height: size,
         ..Default::default()
     });
-    
+
     let mut entries = HashMap::new();
-    
+
     let root = root.as_ref();
     println!("cargo:rerun-if-changed={}", root.display());
     process_dir(&mut entries, &mut packer, root, None);
-    
+
     let target = target.as_ref();
     std::fs::create_dir_all(target).unwrap();
     for (i, page) in packer.get_pages().iter().enumerate() {
         let img = ImageExporter::export(page).unwrap();
         img.save(target.join(&format!("{}.png", i))).unwrap();
     }
-    
+
     for (name, k) in &entries {
         match k {
-            Kind::Array(v) => for (i, o) in v.iter().enumerate() {
-                if o.is_none() {
-                    panic!("index {} of sprite array {} is missing", i, name);
+            Kind::Array(v) => {
+                for (i, o) in v.iter().enumerate() {
+                    if o.is_none() {
+                        panic!("index {} of sprite array {} is missing", i, name);
+                    }
                 }
             }
             Kind::Just(_) => {}
         }
     }
-    
-    let mut sprites = BufWriter::new(
-        File::create(target.join("sprites.rs")).unwrap()
-    );
-    
-    write!(sprites, "mod sprites {{
+
+    let mut sprites = BufWriter::new(File::create(target.join("sprites.rs")).unwrap());
+
+    write!(
+        sprites,
+        "mod sprites {{
         use game_util::Sprite;
         use game_util::prelude::*;
         use game_util::image;
-        pub struct Sprites {{").unwrap();
-    
+        pub struct Sprites {{"
+    )
+    .unwrap();
+
     for (name, kind) in &entries {
         match kind {
             Kind::Just(_) => write!(sprites, "pub {}: Sprite,", name).unwrap(),
-            Kind::Array(v) => write!(sprites, "pub {}: [Sprite; {}],", name, v.len()).unwrap()
+            Kind::Array(v) => write!(sprites, "pub {}: [Sprite; {}],", name, v.len()).unwrap(),
         }
     }
-    
+
     writeln!(sprites, "}}").unwrap();
-    
-    write!(sprites, r#"
+
+    write!(
+        sprites,
+        r#"
         impl Sprites {{
             pub fn load(gl: &Gl) -> Result<(Self, glow::Texture), String> {{
                 let tex;
@@ -80,14 +86,24 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
                     gl.tex_parameter_i32(
                         glow::TEXTURE_2D_ARRAY, glow::TEXTURE_MIN_FILTER, glow::LINEAR as _
                     );
-        "#, size, packer.get_pages().len()
-    ).unwrap();
+        "#,
+        size,
+        packer.get_pages().len()
+    )
+    .unwrap();
 
     for i in 0..packer.get_pages().len() {
-        write!(sprites, "let img = image::load_from_memory_with_format(
+        write!(
+            sprites,
+            "let img = image::load_from_memory_with_format(
             include_bytes!(\"{}.png\") as &[_], image::ImageFormat::Png
-        ).unwrap();", i).unwrap();
-        write!(sprites, r#"
+        ).unwrap();",
+            i
+        )
+        .unwrap();
+        write!(
+            sprites,
+            r#"
             let img = img.as_rgba8().unwrap();
             gl.tex_sub_image_3d(
                 glow::TEXTURE_2D_ARRAY,
@@ -98,7 +114,10 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
                 glow::UNSIGNED_BYTE,
                 glow::PixelUnpackData::Slice(glutil::as_u8_slice(&img))
             );
-        "#, i).unwrap()
+        "#,
+            i
+        )
+        .unwrap()
     }
 
     write!(sprites, "}} Ok((Sprites {{").unwrap();
@@ -126,14 +145,19 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
                     layer: {}.0,\
                     rotated: {}\
                 }},",
-                data.tex.x, size, data.tex.y,
-                data.tex.w, data.tex.h,
+                data.tex.x,
+                size,
+                data.tex.y,
+                data.tex.w,
+                data.tex.h,
                 if data.rotated { data.tex.h } else { data.tex.w },
                 if data.rotated { data.tex.w } else { data.tex.h },
-                data.real_size.0, data.real_size.1,
+                data.real_size.0,
+                data.real_size.1,
                 data.layer,
                 data.rotated
-            ).unwrap();
+            )
+            .unwrap();
         }
     }
 
@@ -144,7 +168,7 @@ fn process_dir(
     entries: &mut HashMap<String, Kind>,
     packer: &mut MultiTexturePacker<RgbaImage>,
     path: &Path,
-    field_name: Option<String>
+    field_name: Option<String>,
 ) {
     for entry in std::fs::read_dir(path).unwrap() {
         let entry = entry.unwrap();
@@ -152,7 +176,8 @@ fn process_dir(
         let t = entry.file_type().unwrap();
         let file_name = entry.file_name();
         let (name, array) = process_name(
-            field_name.as_ref().map(Deref::deref), &file_name.to_string_lossy()
+            field_name.as_ref().map(Deref::deref),
+            &file_name.to_string_lossy(),
         );
 
         if t.is_dir() {
@@ -160,7 +185,7 @@ fn process_dir(
         } else if t.is_file() {
             let key = match array {
                 Some(i) => format!("{}[{}]", name, i),
-                None => name.clone()
+                None => name.clone(),
             };
             let data = process_img(packer, &key, &entry.path());
 
@@ -176,13 +201,13 @@ fn process_dir(
                         }
                         v[i] = Some(data);
                     }
-                    Kind::Just(_) => panic!("mixing sprite and array of sprites at {}", name)
+                    Kind::Just(_) => panic!("mixing sprite and array of sprites at {}", name),
                 }
             } else {
                 match entries.entry(name.clone()) {
                     Entry::Occupied(_) => {
                         panic!("there's already a sprite called {}", name);
-                    },
+                    }
                     Entry::Vacant(e) => {
                         e.insert(Kind::Just(data));
                     }
@@ -195,7 +220,7 @@ fn process_dir(
 #[derive(Debug)]
 enum Kind {
     Just(Data),
-    Array(Vec<Option<Data>>)
+    Array(Vec<Option<Data>>),
 }
 
 #[derive(Debug)]
@@ -210,18 +235,18 @@ fn process_name(parent_name: Option<&str>, name: &str) -> (String, Option<usize>
     lazy_static::lazy_static! {
         static ref REGEX: Regex = Regex::new(r"^([_a-zA-Z][_\w]*)(?:.(\d+))?\.\w+$").unwrap();
     };
-    
+
     match REGEX.captures(name) {
         Some(caps) => {
             let name = caps.get(1).unwrap().as_str();
             let name = match parent_name {
                 Some(p) => format!("{}_{}", p, name),
-                None => name.to_owned()
+                None => name.to_owned(),
             };
             let index = caps.get(2).map(|m| m.as_str().parse().unwrap());
             (name, index)
         }
-        None => panic!("invalid name: {}", name)
+        None => panic!("invalid name: {}", name),
     }
 }
 
@@ -237,7 +262,7 @@ fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Pat
         if img.get_pixel(x, 0).0[3] != 0 {
             add_top_border = true;
         }
-        if img.get_pixel(x, height-1).0[3] != 0 {
+        if img.get_pixel(x, height - 1).0[3] != 0 {
             add_bottom_border = true;
         }
     }
@@ -248,7 +273,7 @@ fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Pat
         if img.get_pixel(0, y).0[3] != 0 {
             add_left_border = true;
         }
-        if img.get_pixel(width-1, y).0[3] != 0 {
+        if img.get_pixel(width - 1, y).0[3] != 0 {
             add_right_border = true;
         }
     }
@@ -269,7 +294,11 @@ fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Pat
                 img.put_pixel(offset_x + x, 0, *base.get_pixel(x, 0));
             }
             if add_bottom_border {
-                img.put_pixel(offset_x + x, img.height() - 1, *base.get_pixel(x, height-1));
+                img.put_pixel(
+                    offset_x + x,
+                    img.height() - 1,
+                    *base.get_pixel(x, height - 1),
+                );
             }
         }
 
@@ -278,7 +307,7 @@ fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Pat
                 img.put_pixel(0, offset_y + y, *base.get_pixel(0, y));
             }
             if add_right_border {
-                img.put_pixel(img.width() - 1, offset_y + y, *base.get_pixel(width-1, y));
+                img.put_pixel(img.width() - 1, offset_y + y, *base.get_pixel(width - 1, y));
             }
         }
 
@@ -286,13 +315,17 @@ fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Pat
             img.put_pixel(0, 0, *base.get_pixel(0, 0));
         }
         if add_left_border && add_bottom_border {
-            img.put_pixel(0, img.height()-1, *base.get_pixel(0, height-1));
+            img.put_pixel(0, img.height() - 1, *base.get_pixel(0, height - 1));
         }
         if add_right_border && add_top_border {
-            img.put_pixel(img.width()-1, 0, *base.get_pixel(width-1, 0));
+            img.put_pixel(img.width() - 1, 0, *base.get_pixel(width - 1, 0));
         }
         if add_right_border && add_bottom_border {
-            img.put_pixel(img.width()-1, img.height()-1, *base.get_pixel(width-1, height-1));
+            img.put_pixel(
+                img.width() - 1,
+                img.height() - 1,
+                *base.get_pixel(width - 1, height - 1),
+            );
         }
     }
 
@@ -309,7 +342,7 @@ fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Pat
         tex: frame.frame,
         real_size: (width, height),
         layer,
-        rotated: frame.rotated
+        rotated: frame.rotated,
     };
 
     if add_top_border {

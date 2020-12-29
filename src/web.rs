@@ -1,25 +1,24 @@
-use crate::prelude::*;
 use crate::gameloop::*;
+use crate::prelude::*;
 
 use std::future::Future;
-use winit::window::{ WindowBuilder, WindowId, Window };
-use winit::event_loop::{ EventLoop, EventLoopProxy };
-use winit::event::WindowEvent;
-use winit::dpi::LogicalSize;
-use winit::platform::web::WindowExtWebSys;
-use web_sys::HtmlElement;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
+use web_sys::HtmlElement;
+use winit::dpi::LogicalSize;
+use winit::event::WindowEvent;
+use winit::event_loop::{EventLoop, EventLoopProxy};
+use winit::platform::web::WindowExtWebSys;
+use winit::window::{Window, WindowBuilder, WindowId};
 
 pub fn launch<G, F>(
     wb: WindowBuilder,
     ups: f64,
     lockstep: bool,
-    init: impl FnOnce(&Window, Gl, EventLoopProxy<G::UserEvent>, LocalExecutor) -> F
-)
-where
+    init: impl FnOnce(&Window, Gl, EventLoopProxy<G::UserEvent>, LocalExecutor) -> F,
+) where
     G: Game + 'static,
-    F: Future<Output = G> + 'static
+    F: Future<Output = G> + 'static,
 {
     let el = EventLoop::with_user_event();
 
@@ -32,20 +31,30 @@ where
     let attributes = js_sys::Object::new();
     js_sys::Reflect::set(&attributes, &"alpha".into(), &false.into()).unwrap();
     let gl = Gl::new(glow::Context::from_webgl2_context(
-        window.canvas().get_context_with_context_options("webgl2", &attributes)
-            .unwrap().unwrap().dyn_into().unwrap()
+        window
+            .canvas()
+            .get_context_with_context_options("webgl2", &attributes)
+            .unwrap()
+            .unwrap()
+            .dyn_into()
+            .unwrap(),
     ));
 
     unsafe {
         gl.bind_vertex_array(gl.create_vertex_array().ok());
     }
 
-    let game_future = init(&window, gl, el.create_proxy(), LocalExecutor { _private: () });
+    let game_future = init(
+        &window,
+        gl,
+        el.create_proxy(),
+        LocalExecutor { _private: () },
+    );
     spawn_local(async move {
         let game = GamePlatformWrapper {
             game: game_future.await,
             container,
-            window
+            window,
         };
 
         webutil::global::set_timeout(0, move || gameloop(el, game, ups, lockstep)).forget();
@@ -55,12 +64,12 @@ where
 struct GamePlatformWrapper<G: Game> {
     game: G,
     container: HtmlElement,
-    window: Window
+    window: Window,
 }
 
 #[derive(Clone)]
 pub struct LocalExecutor {
-    _private: ()
+    _private: (),
 }
 
 impl<G: Game> Game for GamePlatformWrapper<G> {

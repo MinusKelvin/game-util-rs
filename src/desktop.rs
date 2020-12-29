@@ -1,23 +1,22 @@
-use crate::prelude::*;
 use crate::gameloop::*;
+use crate::prelude::*;
 
-use std::future::Future;
+use futures::executor::{LocalPool, LocalSpawner};
 use futures::task::LocalSpawnExt;
-use futures::executor::{ LocalPool, LocalSpawner };
-use winit::window::{ WindowBuilder, WindowId, Window };
-use winit::event_loop::{ EventLoop, EventLoopProxy };
-use winit::event::WindowEvent;
 use glutin::{Api, GlRequest, PossiblyCurrent, WindowedContext};
+use std::future::Future;
+use winit::event::WindowEvent;
+use winit::event_loop::{EventLoop, EventLoopProxy};
+use winit::window::{Window, WindowBuilder, WindowId};
 
 pub fn launch<G, F>(
     wb: WindowBuilder,
     ups: f64,
     lockstep: bool,
-    init: impl FnOnce(&Window, Gl, EventLoopProxy<G::UserEvent>, LocalExecutor) -> F
-)
-where
+    init: impl FnOnce(&Window, Gl, EventLoopProxy<G::UserEvent>, LocalExecutor) -> F,
+) where
     G: Game + 'static,
-    F: Future<Output = G> + 'static
+    F: Future<Output = G> + 'static,
 {
     let el = EventLoop::with_user_event();
 
@@ -29,9 +28,8 @@ where
 
     let context = unsafe { context.make_current() }.unwrap();
 
-    let gl = Gl::new(unsafe {
-        glow::Context::from_loader_function(|s| context.get_proc_address(s))
-    });
+    let gl =
+        Gl::new(unsafe { glow::Context::from_loader_function(|s| context.get_proc_address(s)) });
 
     unsafe {
         gl.bind_vertex_array(gl.create_vertex_array().ok());
@@ -39,13 +37,13 @@ where
 
     let mut pool = futures::executor::LocalPool::new();
     let spawner = LocalExecutor {
-        spawner: pool.spawner()
+        spawner: pool.spawner(),
     };
 
     let game = GamePlatformWrapper {
         game: pool.run_until(init(context.window(), gl, el.create_proxy(), spawner)),
         context,
-        pool
+        pool,
     };
 
     gameloop(el, game, ups, lockstep);
@@ -54,12 +52,12 @@ where
 struct GamePlatformWrapper<G: Game> {
     game: G,
     context: WindowedContext<PossiblyCurrent>,
-    pool: LocalPool
+    pool: LocalPool,
 }
 
 #[derive(Clone)]
 pub struct LocalExecutor {
-    spawner: LocalSpawner
+    spawner: LocalSpawner,
 }
 
 impl<G: Game> Game for GamePlatformWrapper<G> {
