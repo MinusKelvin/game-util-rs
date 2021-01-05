@@ -26,8 +26,6 @@ pub fn launch<G, F>(
     let container = document.body().unwrap();
     let window = wb.build(&el).unwrap();
 
-    container.append_with_node_1(&window.canvas()).unwrap();
-
     let attributes = js_sys::Object::new();
     js_sys::Reflect::set(&attributes, &"alpha".into(), &false.into()).unwrap();
     let gl = Gl::new(glow::Context::from_webgl2_context(
@@ -56,6 +54,8 @@ pub fn launch<G, F>(
             container,
             window,
         };
+
+        game.container.append_with_node_1(&game.window.canvas()).unwrap();
 
         webutil::global::set_timeout(0, move || gameloop(el, game, ups, lockstep)).forget();
     });

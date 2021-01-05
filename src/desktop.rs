@@ -23,7 +23,7 @@ pub fn launch<G, F>(
     let context = glutin::ContextBuilder::new()
         .with_vsync(true)
         .with_gl(GlRequest::Specific(Api::OpenGlEs, (3, 0)))
-        .build_windowed(wb, &el)
+        .build_windowed(wb.with_visible(false), &el)
         .unwrap();
 
     let context = unsafe { context.make_current() }.unwrap();
@@ -45,6 +45,7 @@ pub fn launch<G, F>(
         context,
         pool,
     };
+    game.context.window().set_visible(true);
 
     gameloop(el, game, ups, lockstep);
 }
