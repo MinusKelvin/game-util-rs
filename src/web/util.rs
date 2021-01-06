@@ -3,7 +3,7 @@ use crate::prelude::*;
 
 use std::future::Future;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::spawn_local;
+use wasm_bindgen_futures::{spawn_local, JsFuture};
 use web_sys::HtmlElement;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
@@ -28,7 +28,7 @@ pub fn launch<G, F>(
 
     let attributes = js_sys::Object::new();
     js_sys::Reflect::set(&attributes, &"alpha".into(), &false.into()).unwrap();
-    let gl = Gl::new(glow::Context::from_webgl2_context(
+    let gl = Gl::new(
         window
             .canvas()
             .get_context_with_context_options("webgl2", &attributes)
@@ -36,7 +36,7 @@ pub fn launch<G, F>(
             .unwrap()
             .dyn_into()
             .unwrap(),
-    ));
+    );
 
     unsafe {
         gl.bind_vertex_array(gl.create_vertex_array().ok());
@@ -55,7 +55,9 @@ pub fn launch<G, F>(
             window,
         };
 
-        game.container.append_with_node_1(&game.window.canvas()).unwrap();
+        game.container
+            .append_with_node_1(&game.window.canvas())
+            .unwrap();
 
         webutil::global::set_timeout(0, move || gameloop(el, game, ups, lockstep)).forget();
     });
@@ -103,5 +105,26 @@ impl<G: Game> Game for GamePlatformWrapper<G> {
 impl LocalExecutor {
     pub fn spawn(&self, f: impl Future<Output = ()> + 'static) {
         spawn_local(f);
+    }
+}
+
+pub async fn load_binary(source: &str) -> Result<Vec<u8>, String> {
+    match JsFuture::from(web_sys::window().unwrap().fetch_with_str(source)).await {
+        Ok(v) => {
+            let response: web_sys::Response = v.dyn_into().unwrap();
+            if !response.ok() {
+                return Err(format!(
+                    "Server responded with {} {}",
+                    response.status(),
+                    response.status_text()
+                ));
+            }
+            let buffer = JsFuture::from(response.array_buffer().unwrap()).await.unwrap();
+            let buffer = js_sys::Uint8Array::new(&buffer);
+            Ok(buffer.to_vec())
+        }
+        Err(_) => {
+            Err("fetch promise rejected".to_string())
+        }
     }
 }

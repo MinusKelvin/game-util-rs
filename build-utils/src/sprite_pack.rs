@@ -68,7 +68,7 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
         sprites,
         r#"
         impl Sprites {{
-            pub fn load(gl: &Gl) -> Result<(Self, glow::Texture), String> {{
+            pub async fn load(gl: &Gl, base: &str) -> Result<(Self, glow::Texture), String> {{
                 let tex;
                 unsafe {{
                     tex = gl.create_texture()?;
@@ -92,33 +92,18 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
     )
     .unwrap();
 
+    writeln!(sprites, "game_util::futures_util::join!(").unwrap();
     for i in 0..packer.get_pages().len() {
-        write!(
+        writeln!(
             sprites,
-            "let img = image::load_from_memory_with_format(
-            include_bytes!(\"{}.png\") as &[_], image::ImageFormat::Png
-        ).unwrap();",
-            i
-        )
-        .unwrap();
-        write!(
-            sprites,
-            r#"
-            let img = img.as_rgba8().unwrap();
-            gl.tex_sub_image_3d(
-                glow::TEXTURE_2D_ARRAY,
-                0,
-                0, 0, {},
-                img.width() as _, img.height() as _, 1,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                glow::PixelUnpackData::Slice(glutil::as_u8_slice(&img))
-            );
-        "#,
-            i
-        )
-        .unwrap()
+            "game_util::gltuil::load_texture_layer(
+                gl, base.to_owned() + \"/{i}.png\", tex, {size}, {size}, {i}
+            ),",
+            i = i,
+            size = size,
+        ).unwrap();
     }
+    writeln!(sprites, ");").unwrap();
 
     write!(sprites, "}} Ok((Sprites {{").unwrap();
 

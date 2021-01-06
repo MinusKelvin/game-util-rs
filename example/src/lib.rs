@@ -1,5 +1,6 @@
 use game_util::prelude::*;
 use game_util::rusttype::Font;
+use game_util::text::{Alignment, TextRenderer};
 use game_util::winit::dpi::PhysicalSize;
 use game_util::winit::event::WindowEvent;
 use game_util::winit::window::{WindowBuilder, WindowId};
@@ -13,11 +14,11 @@ struct Game {
     counter: f64,
     start: Instant,
     dpi: f64,
-    text: game_util::TextRenderer,
+    text: TextRenderer,
 }
 
 impl game_util::Game for Game {
-    type UserEvent = ();
+    type UserEvent = game_util::rusttype::Font<'static>;
 
     fn update(&mut self) -> GameloopCommand {
         let time = Instant::now() - self.start;
@@ -41,7 +42,7 @@ impl game_util::Game for Game {
             ),
             15.0,
             350.0,
-            game_util::Alignment::Left,
+            Alignment::Left,
             [255; 4],
             32.0,
             0,
@@ -55,26 +56,19 @@ impl game_util::Game for Game {
             ),
             15.0,
             160.0,
-            game_util::Alignment::Left,
+            Alignment::Left,
             [0, 0, 0, 255],
             28.0,
             0,
         );
-        self.text.draw_text(
-            "16px",
-            10.0,
-            10.0,
-            game_util::Alignment::Left,
-            [0, 0, 0, 255],
-            16.0,
-            0,
-        );
+        self.text
+            .draw_text("16px", 10.0, 10.0, Alignment::Left, [0, 0, 0, 255], 16.0, 0);
 
         self.text.draw_text(
             &unsafe { self.gl.get_parameter_string(glow::VERSION) },
             100.0,
             10.0,
-            game_util::Alignment::Left,
+            Alignment::Left,
             [0, 0, 0, 255],
             16.0,
             0,
@@ -107,7 +101,8 @@ impl game_util::Game for Game {
         GameloopCommand::Continue
     }
 
-    fn user_event(&mut self, _: ()) -> GameloopCommand {
+    fn user_event(&mut self, font: Self::UserEvent) -> GameloopCommand {
+        self.text.add_fallback_font(0, font);
         GameloopCommand::Continue
     }
 }
@@ -117,10 +112,23 @@ pub fn main() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
-    game_util::platform::launch(WindowBuilder::new(), 60.0, true, |window, gl, _, _| {
+    game_util::launch(WindowBuilder::new(), 60.0, true, |window, gl, proxy, executor| {
         let dpi = window.scale_factor();
         let psize = window.inner_size();
         async move {
+            executor.spawn(async move {
+                proxy.send_event(Font::try_from_vec(
+                    game_util::load_binary("res/WenQuanYiMicroHei.ttf")
+                        .await
+                        .unwrap(),
+                ).unwrap()).ok();
+            });
+            let noto_sans = Font::try_from_vec(
+                game_util::load_binary("res/NotoSans-Regular.ttf")
+                    .await
+                    .unwrap(),
+            ).unwrap();
+
             Game {
                 psize,
                 dpi,
@@ -128,13 +136,8 @@ pub fn main() {
                 counter: 0.0,
                 start: Instant::now(),
                 text: {
-                    let mut t = game_util::TextRenderer::new(&gl).unwrap();
-                    t.add_style(ArrayVec::from([
-                        Font::try_from_bytes(include_bytes!("NotoSans-Regular.ttf") as &[u8])
-                            .unwrap(),
-                        Font::try_from_bytes(include_bytes!("WenQuanYiMicroHei.ttf") as &[u8])
-                            .unwrap(),
-                    ]));
+                    let mut t = TextRenderer::new(&gl).unwrap();
+                    t.add_style(Some(noto_sans));
                     t
                 },
                 gl,

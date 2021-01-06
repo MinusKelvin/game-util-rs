@@ -1,10 +1,11 @@
 use crate::gameloop::*;
 use crate::prelude::*;
 
+use futures::channel::oneshot;
 use futures::executor::{LocalPool, LocalSpawner};
 use futures::task::LocalSpawnExt;
 use glutin::{Api, GlRequest, PossiblyCurrent, WindowedContext};
-use std::future::Future;
+use std::{future::Future, path::PathBuf};
 use winit::event::WindowEvent;
 use winit::event_loop::{EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowBuilder, WindowId};
@@ -94,4 +95,11 @@ impl LocalExecutor {
     pub fn spawn(&self, f: impl Future<Output = ()> + 'static) {
         self.spawner.spawn_local(f).unwrap();
     }
+}
+
+pub async fn load_binary(source: &str) -> Result<Vec<u8>, String> {
+    let (s, r) = oneshot::channel();
+    let path = PathBuf::from(source);
+    std::thread::spawn(|| s.send(std::fs::read(path).map_err(|e| e.to_string())));
+    r.await.unwrap()
 }

@@ -6,24 +6,25 @@ edition = "2018"
 
 [dependencies]
 euclid = { version = "0.22", features = ["serde"] }
-glow = "0.6"
-winit = { version = "0.23", features = ["serde", "web-sys"] }
+glow = "0.7"
+winit = { version = "0.24", features = ["serde", "web-sys"] }
 rusttype = { version = "0.9", features = ["gpu_cache"] }
-image = "0.23"
 serde = { version = "1.0", features = ["derive"] }
 arrayvec = "0.5"
 scopeguard = "1.1"
-lazy_static = "1.4.0"
-instant = "0.1.9"
+lazy_static = "1.4"
+instant = "0.1"
+futures-util = "0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-glutin = "0.25"
-rodio = "0.11.0"
-futures = "0.3.8"
+glutin = "0.26"
+rodio = "0.13"
+futures = "0.3"
+image = "0.23"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 webutil = { git = "https://github.com/MinusKelvin/webutil", rev = "fb24e2b" }
-web-sys = "0.3"
+web-sys = { version = "0.3", features = ["Response"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-js-sys = "0.3.46"
+js-sys = "0.3"

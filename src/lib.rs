@@ -1,23 +1,21 @@
 pub extern crate arrayvec;
 pub extern crate euclid;
-pub extern crate image;
+pub extern crate futures_util;
 pub extern crate rusttype;
 pub extern crate winit;
 
 mod gameloop;
 pub mod glutil;
-mod sprite;
-mod text;
-mod tilemap;
+pub mod sprite;
+pub mod text;
+pub mod tilemap;
 
-#[cfg_attr(target_arch = "wasm32", path = "web.rs")]
-#[cfg_attr(not(target_arch = "wasm32"), path = "desktop.rs")]
-pub mod platform;
+#[cfg_attr(target_arch = "wasm32", path = "web/mod.rs")]
+#[cfg_attr(not(target_arch = "wasm32"), path = "desktop/mod.rs")]
+mod backend;
 
+pub use backend::util::*;
 pub use gameloop::*;
-pub use sprite::*;
-pub use text::*;
-pub use tilemap::*;
 
 pub mod prelude {
     pub use arrayvec::{ArrayString, ArrayVec};

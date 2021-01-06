@@ -30,7 +30,7 @@ pub enum GameloopCommand {
 /// If `lockstep` is true, then when FPS is close to UPS (within 2 Hz or 1 millisecond, whichever
 /// is shorter), this will switch to being a lockstep gameloop. This results in more responsive
 /// gameplay at the cost of slight drift over time.
-pub fn gameloop<G: Game + 'static>(
+pub(crate) fn gameloop<G: Game + 'static>(
     el: EventLoop<G::UserEvent>,
     mut game: G,
     mut ups: f64,
