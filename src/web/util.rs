@@ -24,7 +24,9 @@ pub fn launch<G, F>(
 
     let document = web_sys::window().unwrap().document().unwrap();
     let container = document.body().unwrap();
-    let window = wb.build(&el).unwrap();
+    let w = container.client_width();
+    let h = container.client_height();
+    let window = wb.with_inner_size(LogicalSize::new(w, h)).build(&el).unwrap();
 
     let attributes = js_sys::Object::new();
     js_sys::Reflect::set(&attributes, &"alpha".into(), &false.into()).unwrap();
