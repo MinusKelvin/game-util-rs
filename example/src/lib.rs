@@ -1,5 +1,6 @@
 use game_util::prelude::*;
 use game_util::rusttype::Font;
+use game_util::sprite::SpriteBatch;
 use game_util::text::{Alignment, TextRenderer};
 use game_util::winit::dpi::PhysicalSize;
 use game_util::winit::event::WindowEvent;
@@ -15,12 +16,26 @@ struct Game {
     start: Instant,
     dpi: f64,
     text: TextRenderer,
+    ball_pos: Point2<f32>,
+    ball_prev_pos: Point2<f32>,
+    ball_vel: Vec2<f32>,
+    mouse_pos: Point2<f32>,
+    mouse_in_window: bool,
+    sprites: sprites::Sprites,
+    sprite_renderer: SpriteBatch,
 }
 
 impl game_util::Game for Game {
     type UserEvent = game_util::rusttype::Font<'static>;
 
     fn update(&mut self) -> GameloopCommand {
+        self.ball_prev_pos = self.ball_pos;
+        if self.mouse_in_window {
+            self.ball_vel += (self.mouse_pos - self.ball_pos) * 0.01;
+        }
+        self.ball_vel *= 0.95;
+        self.ball_pos += self.ball_vel;
+
         let time = Instant::now() - self.start;
         self.counter += 1.0 / 60.0;
         self.drift = self.counter - time.as_secs_f64();
@@ -31,6 +46,12 @@ impl game_util::Game for Game {
         let lsize = self.psize.to_logical::<f64>(self.dpi);
         self.text.dpi = self.dpi as f32;
         self.text.screen_size = (lsize.width as f32, lsize.height as f32);
+
+        self.sprite_renderer.draw(
+            &self.sprites.ball,
+            self.ball_prev_pos.lerp(self.ball_pos, alpha as f32),
+            [255; 4],
+        );
 
         self.text.draw_text(
             &format!(
@@ -86,6 +107,15 @@ impl game_util::Game for Game {
                 .blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
         }
 
+        self.sprite_renderer.render(Transform3D::ortho(
+            0.0,
+            self.psize.width as f32,
+            0.0,
+            self.psize.height as f32,
+            -1.0,
+            1.0,
+        ));
+
         self.text.render();
     }
 
@@ -96,6 +126,11 @@ impl game_util::Game for Game {
                 self.psize = new_size;
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.dpi = scale_factor,
+            WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_pos = point2(position.x as f32, self.psize.height as f32 - position.y as f32)
+            }
+            WindowEvent::CursorLeft { .. } => self.mouse_in_window = false,
+            WindowEvent::CursorEntered { .. } => self.mouse_in_window = true,
             _ => {}
         }
         GameloopCommand::Continue
@@ -112,36 +147,68 @@ pub fn main() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
-    game_util::launch(WindowBuilder::new(), 60.0, true, |window, gl, proxy, executor| {
-        let dpi = window.scale_factor();
-        let psize = window.inner_size();
-        async move {
-            executor.spawn(async move {
-                proxy.send_event(Font::try_from_vec(
-                    game_util::load_binary("res/WenQuanYiMicroHei.ttf")
-                        .await
-                        .unwrap(),
-                ).unwrap()).ok();
-            });
-            let noto_sans = Font::try_from_vec(
-                game_util::load_binary("res/NotoSans-Regular.ttf")
-                    .await
-                    .unwrap(),
-            ).unwrap();
+    game_util::launch(
+        WindowBuilder::new(),
+        60.0,
+        true,
+        |window, gl, proxy, executor| {
+            let dpi = window.scale_factor();
+            let psize = window.inner_size();
+            async move {
+                executor.spawn(async move {
+                    proxy
+                        .send_event(
+                            Font::try_from_vec(
+                                game_util::load_binary("res/WenQuanYiMicroHei.ttf")
+                                    .await
+                                    .unwrap(),
+                            )
+                            .unwrap(),
+                        )
+                        .ok();
+                });
 
-            Game {
-                psize,
-                dpi,
-                drift: 0.0,
-                counter: 0.0,
-                start: Instant::now(),
-                text: {
-                    let mut t = TextRenderer::new(&gl).unwrap();
-                    t.add_style(Some(noto_sans));
-                    t
-                },
-                gl,
+                let (noto_sans, (sprites, sprite_tex)) = game_util::futures_util::join!(
+                    async {
+                        Font::try_from_vec(
+                            game_util::load_binary("res/NotoSans-Regular.ttf")
+                                .await
+                                .unwrap(),
+                        )
+                        .unwrap()
+                    },
+                    async { sprites::Sprites::load(&gl, "res/generated").await.unwrap() }
+                );
+
+                let center = point2(psize.width as f32, psize.height as f32) / 2.0;
+                Game {
+                    psize,
+                    dpi,
+                    drift: 0.0,
+                    counter: 0.0,
+                    ball_pos: center,
+                    ball_prev_pos: center,
+                    ball_vel: vec2(0.0, 0.0),
+                    mouse_pos: center,
+                    mouse_in_window: false,
+                    start: Instant::now(),
+                    text: {
+                        let mut t = TextRenderer::new(&gl).unwrap();
+                        t.add_style(Some(noto_sans));
+                        t
+                    },
+                    sprites,
+                    sprite_renderer: SpriteBatch::new(
+                        &gl,
+                        game_util::sprite::sprite_shader(&gl),
+                        sprite_tex,
+                    )
+                    .unwrap(),
+                    gl,
+                }
             }
-        }
-    });
+        },
+    );
 }
+
+include!(concat!(env!("OUT_DIR"), "/sprites.rs"));

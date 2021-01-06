@@ -10,7 +10,12 @@ use texture_packer::exporter::ImageExporter;
 use texture_packer::importer::ImageImporter;
 use texture_packer::{MultiTexturePacker, Rect, TexturePackerConfig};
 
-pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) {
+pub fn gen_sprites(
+    sprite_folder: impl AsRef<Path>,
+    out_images: impl AsRef<Path>,
+    out_code: impl AsRef<Path>,
+    size: u32,
+) {
     let mut packer = MultiTexturePacker::new_skyline(TexturePackerConfig {
         max_width: size,
         max_height: size,
@@ -19,11 +24,11 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
 
     let mut entries = HashMap::new();
 
-    let root = root.as_ref();
+    let root = sprite_folder.as_ref();
     println!("cargo:rerun-if-changed={}", root.display());
     process_dir(&mut entries, &mut packer, root, None);
 
-    let target = target.as_ref();
+    let target = out_images.as_ref();
     std::fs::create_dir_all(target).unwrap();
     for (i, page) in packer.get_pages().iter().enumerate() {
         let img = ImageExporter::export(page).unwrap();
@@ -43,14 +48,13 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
         }
     }
 
-    let mut sprites = BufWriter::new(File::create(target.join("sprites.rs")).unwrap());
+    let mut sprites = BufWriter::new(File::create(out_code.as_ref().join("sprites.rs")).unwrap());
 
     write!(
         sprites,
         "mod sprites {{
-        use game_util::Sprite;
+        use game_util::sprite::Sprite;
         use game_util::prelude::*;
-        use game_util::image;
         pub struct Sprites {{"
     )
     .unwrap();
@@ -92,18 +96,18 @@ pub fn gen_sprites(root: impl AsRef<Path>, target: impl AsRef<Path>, size: u32) 
     )
     .unwrap();
 
-    writeln!(sprites, "game_util::futures_util::join!(").unwrap();
+    writeln!(sprites, "game_util::futures_util::try_join!(").unwrap();
     for i in 0..packer.get_pages().len() {
         writeln!(
             sprites,
-            "game_util::gltuil::load_texture_layer(
-                gl, base.to_owned() + \"/{i}.png\", tex, {size}, {size}, {i}
-            ),",
-            i = i,
-            size = size,
-        ).unwrap();
+            "async {{ game_util::glutil::load_texture_layer(
+                gl, &(base.to_owned() + \"/{}.png\"), tex, {0}
+            ).await }},",
+            i
+        )
+        .unwrap();
     }
-    writeln!(sprites, ");").unwrap();
+    writeln!(sprites, ")?;").unwrap();
 
     write!(sprites, "}} Ok((Sprites {{").unwrap();
 
@@ -236,7 +240,7 @@ fn process_name(parent_name: Option<&str>, name: &str) -> (String, Option<usize>
 }
 
 fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Path) -> Data {
-    let mut img = ImageImporter::import_from_file(path).unwrap().to_rgba();
+    let mut img = ImageImporter::import_from_file(path).unwrap().to_rgba8();
 
     let width = img.width();
     let height = img.height();

@@ -16,3 +16,6 @@ instant = "0.1.9"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1.6"
+
+[build-dependencies]
+build-utils = { path = "../build-utils" }

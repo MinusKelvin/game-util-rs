@@ -57,12 +57,9 @@ pub async fn load_texture_layer(
     gl: &Gl,
     source: &str,
     texture: glow::Texture,
-    width: i32,
-    height: i32,
     layer: i32,
 ) -> Result<(), String> {
     let image = load_image(source).await?;
-    let layers = image.height() as i32 / height;
     unsafe {
         gl.bind_texture(glow::TEXTURE_2D_ARRAY, Some(texture));
         gl.tex_sub_image_3d(
@@ -71,9 +68,9 @@ pub async fn load_texture_layer(
             0,
             0,
             layer,
-            width,
-            height,
-            layers,
+            image.width() as i32,
+            image.height() as i32,
+            1,
             glow::RGBA,
             glow::UNSIGNED_BYTE,
             glow::PixelUnpackData::Slice(&image),
