@@ -26,7 +26,10 @@ pub fn launch<G, F>(
     let container = document.body().unwrap();
     let w = container.client_width();
     let h = container.client_height();
-    let window = wb.with_inner_size(LogicalSize::new(w, h)).build(&el).unwrap();
+    let window = wb
+        .with_inner_size(LogicalSize::new(w, h))
+        .build(&el)
+        .unwrap();
 
     let attributes = js_sys::Object::new();
     js_sys::Reflect::set(&attributes, &"alpha".into(), &false.into()).unwrap();
@@ -111,22 +114,7 @@ impl LocalExecutor {
 }
 
 pub async fn load_binary(source: &str) -> Result<Vec<u8>, String> {
-    match JsFuture::from(web_sys::window().unwrap().fetch_with_str(source)).await {
-        Ok(v) => {
-            let response: web_sys::Response = v.dyn_into().unwrap();
-            if !response.ok() {
-                return Err(format!(
-                    "Server responded with {} {}",
-                    response.status(),
-                    response.status_text()
-                ));
-            }
-            let buffer = JsFuture::from(response.array_buffer().unwrap()).await.unwrap();
-            let buffer = js_sys::Uint8Array::new(&buffer);
-            Ok(buffer.to_vec())
-        }
-        Err(_) => {
-            Err("fetch promise rejected".to_string())
-        }
-    }
+    let blob = super::load_blob(source).await?;
+    let buffer = JsFuture::from(blob.array_buffer()).await.unwrap();
+    Ok(js_sys::Uint8Array::new(&buffer).to_vec())
 }

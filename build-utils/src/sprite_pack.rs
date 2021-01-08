@@ -96,7 +96,7 @@ pub fn gen_sprites(
     )
     .unwrap();
 
-    writeln!(sprites, "game_util::futures_util::try_join!(").unwrap();
+    writeln!(sprites, "game_util::futures::try_join!(").unwrap();
     for i in 0..packer.get_pages().len() {
         writeln!(
             sprites,

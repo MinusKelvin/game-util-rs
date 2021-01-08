@@ -1,11 +1,12 @@
 pub extern crate arrayvec;
 pub extern crate euclid;
-pub extern crate futures_util;
+pub extern crate futures;
 pub extern crate rusttype;
 pub extern crate winit;
 
 mod gameloop;
 pub mod glutil;
+pub mod sound;
 pub mod sprite;
 pub mod text;
 pub mod tilemap;

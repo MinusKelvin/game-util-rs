@@ -71,6 +71,7 @@ impl<G: Game> Game for GamePlatformWrapper<G> {
 
     fn render(&mut self, alpha: f64, smooth_delta: f64) {
         self.game.render(alpha, smooth_delta);
+        self.pool.run_until_stalled();
         self.context.swap_buffers().unwrap();
     }
 
