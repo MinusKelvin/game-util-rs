@@ -1,6 +1,6 @@
 use wasm_bindgen::{JsValue, JsCast};
 use js_sys::{Error, Array, ArrayBuffer, Map};
-use web_sys::{AudioContext, AudioBuffer, AudioNode, AudioBufferSourceNode, ConstantSourceNode, Response};
+use web_sys::{AudioContext, AudioBuffer, AudioBufferSourceNode, ConstantSourceNode, Response};
 use wasm_bindgen_futures::JsFuture;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::StreamExt;
@@ -61,31 +61,24 @@ impl SoundService {
         gain.connect_with_audio_node(&ctx.destination()).unwrap();
         self.gain_source.connect_with_audio_param(&gain.gain()).unwrap();
 
-        let source: AudioNode = ctx
+        let source: AudioBufferSourceNode = ctx
             .create_buffer_source()
             .unwrap()
             .dyn_into()
             .unwrap();
         source.connect_with_audio_node(&gain).unwrap();
-        let source: AudioBufferSourceNode = source
-            .dyn_into()
-            .unwrap();
         source.set_buffer(Some(sound));
         
-        wasm_bindgen_futures::spawn_local({
+        {
             let source = source.clone();
             let source_nodes = source_nodes.clone();
-            let event = source
-                .dyn_ref::<web_sys::EventTarget>()
-                .unwrap()
-                .once::<webutil::event::Ended>();
-
+            let event = source.once::<webutil::event::Ended>();
             source_nodes.set(&source, &(ctx.current_time() - offset).into());
-            async move {
+            wasm_bindgen_futures::spawn_local(async move {
                 event.await;
                 source_nodes.delete(&source);
-            }
-        });
+            });
+        }
         source.start_with_when_and_grain_offset(0.0, offset).unwrap();
     }
 
