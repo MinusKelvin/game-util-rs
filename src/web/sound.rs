@@ -38,28 +38,11 @@ enum ServiceState {
     Paused(Vec<(AudioBuffer, f64)>)
 }
 
-struct SoundService {
-    gain_source: ConstantSourceNode
-}
-
-impl SoundService {
-    fn new() -> Self {
-        let gain_source = AUDIO_CONTEXT.with(|ctx| ctx.create_constant_source().unwrap());
-        gain_source.start().unwrap();
-
-        Self {
-            gain_source
-        }
-    }
-
-    fn set_volume(&self, volume: f32) {
-        self.gain_source.offset().set_value(volume);
-    }
-
-    fn play_sound(&self, ctx: &AudioContext, source_nodes: &Map, sound: &AudioBuffer, offset: f64) {
+pub(crate) async fn sound_service(mut source: UnboundedReceiver<SoundCommand>) {
+    fn play_sound(ctx: &AudioContext, source_nodes: &Map, gain_source: &ConstantSourceNode, sound: &AudioBuffer, offset: f64) {
         let gain = ctx.create_gain().unwrap();
         gain.connect_with_audio_node(&ctx.destination()).unwrap();
-        self.gain_source.connect_with_audio_param(&gain.gain()).unwrap();
+        gain_source.connect_with_audio_param(&gain.gain()).unwrap();
 
         let source: AudioBufferSourceNode = ctx
             .create_buffer_source()
@@ -82,55 +65,52 @@ impl SoundService {
         source.start_with_when_and_grain_offset(0.0, offset).unwrap();
     }
 
-    async fn run(&mut self, mut source: UnboundedReceiver<SoundCommand>) {
-        let mut state = ServiceState::Playing(Map::new());
-        while let Some(cmd) = source.next().await {
-            AUDIO_CONTEXT.with(|ctx| {
-                match state {
-                    ServiceState::Playing(ref source_nodes) => match cmd {
-                        SoundCommand::Play(ref sound) => self.play_sound(ctx, source_nodes, sound, 0.0),
-                        SoundCommand::Pause => {
-                            let source_nodes = source_nodes
-                                .entries()
-                                .into_iter()
-                                .map(|entry| {
-                                    let entry: Array = entry
-                                        .unwrap().dyn_into().unwrap();
-                                    let source: AudioBufferSourceNode =
-                                        entry.get(0).dyn_into().unwrap();
-                                    let start_time = entry.get(1).as_f64().unwrap();
-                                    
-                                    source.stop().unwrap();
-                                    (source.buffer().unwrap(), ctx.current_time() - start_time)
-                                })
-                                .collect();
-                            state = ServiceState::Paused(source_nodes);
-                        },
-                        SoundCommand::Resume => {},
-                        SoundCommand::Stop => for source in source_nodes.keys() {
-                            source.unwrap().dyn_into::<AudioBufferSourceNode>().unwrap().stop().unwrap();
-                        },
-                        SoundCommand::SetVolume(volume) => self.set_volume(volume)
-                    }
-                    ServiceState::Paused(ref mut queued_sounds) => match cmd {
-                        SoundCommand::Play(sound) => queued_sounds.push((sound, 0.0)),
-                        SoundCommand::Pause => {},
-                        SoundCommand::Resume => {
-                            let source_nodes = Map::new();
-                            for (sound, offset) in queued_sounds {
-                                self.play_sound(ctx, &source_nodes, sound, *offset);
-                            }
-                            state = ServiceState::Playing(source_nodes);
-                        },
-                        SoundCommand::Stop => queued_sounds.clear(),
-                        SoundCommand::SetVolume(volume) => self.set_volume(volume)
-                    }
-                }
-            });
-        }
-    }
-}
+    let gain_source = AUDIO_CONTEXT.with(|ctx| ctx.create_constant_source().unwrap());
+    gain_source.start().unwrap();
 
-pub(crate) async fn sound_service(source: UnboundedReceiver<SoundCommand>) {
-    SoundService::new().run(source).await;
+    let mut state = ServiceState::Playing(Map::new());
+    while let Some(cmd) = source.next().await {
+        AUDIO_CONTEXT.with(|ctx| {
+            match state {
+                ServiceState::Playing(ref source_nodes) => match cmd {
+                    SoundCommand::Play(ref sound) => play_sound(ctx, source_nodes, &gain_source, sound, 0.0),
+                    SoundCommand::Pause => {
+                        let source_nodes = source_nodes
+                            .entries()
+                            .into_iter()
+                            .map(|entry| {
+                                let entry: Array = entry
+                                    .unwrap().dyn_into().unwrap();
+                                let source: AudioBufferSourceNode =
+                                    entry.get(0).dyn_into().unwrap();
+                                let start_time = entry.get(1).as_f64().unwrap();
+                                
+                                source.stop().unwrap();
+                                (source.buffer().unwrap(), ctx.current_time() - start_time)
+                            })
+                            .collect();
+                        state = ServiceState::Paused(source_nodes);
+                    },
+                    SoundCommand::Resume => {},
+                    SoundCommand::Stop => for source in source_nodes.keys() {
+                        source.unwrap().dyn_into::<AudioBufferSourceNode>().unwrap().stop().unwrap();
+                    },
+                    SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume)
+                }
+                ServiceState::Paused(ref mut queued_sounds) => match cmd {
+                    SoundCommand::Play(sound) => queued_sounds.push((sound, 0.0)),
+                    SoundCommand::Pause => {},
+                    SoundCommand::Resume => {
+                        let source_nodes = Map::new();
+                        for (sound, offset) in queued_sounds {
+                            play_sound(ctx, &source_nodes, &gain_source, sound, *offset);
+                        }
+                        state = ServiceState::Playing(source_nodes);
+                    },
+                    SoundCommand::Stop => queued_sounds.clear(),
+                    SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume)
+                }
+            }
+        });
+    }
 }
