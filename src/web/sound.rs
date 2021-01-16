@@ -1,10 +1,12 @@
 use wasm_bindgen::{JsValue, JsCast};
-use js_sys::{Error, Array, ArrayBuffer, Map};
+use js_sys::{Error, ArrayBuffer};
 use web_sys::{AudioContext, AudioBuffer, AudioBufferSourceNode, ConstantSourceNode, Response};
 use wasm_bindgen_futures::JsFuture;
 use futures::channel::mpsc::UnboundedReceiver;
+use futures::FutureExt;
 use futures::StreamExt;
 use webutil::event::EventTargetExt;
+use webutil::channel::{channel, Sender, Receiver};
 
 use crate::sound::SoundCommand;
 
@@ -34,12 +36,57 @@ pub(crate) async fn load(source: &str) -> Result<InternalSound, String> {
 }
 
 enum ServiceState {
-    Playing(Map),
+    Playing(SoundHandler),
     Paused(Vec<(AudioBuffer, f64)>)
 }
 
-pub(crate) async fn sound_service(mut source: UnboundedReceiver<SoundCommand>) {
-    fn play_sound(ctx: &AudioContext, source_nodes: &Map, gain_source: &ConstantSourceNode, sound: &AudioBuffer, offset: f64) {
+struct SoundHandler {
+    playing: Vec<(AudioBufferSourceNode, f64)>,
+    dead_nodes_send: Sender<AudioBufferSourceNode>,
+    dead_nodes_recv: Receiver<AudioBufferSourceNode> 
+}
+
+impl SoundHandler {
+    fn new() -> Self {
+        let (dead_nodes_send, dead_nodes_recv) = channel();
+        Self {
+            playing: Vec::new(),
+            dead_nodes_send,
+            dead_nodes_recv
+        }
+    }
+
+    fn unpause(ctx: &AudioContext, gain_source: &ConstantSourceNode, sounds: &[(AudioBuffer, f64)]) -> Self {
+        let mut this = SoundHandler::new();
+        for (sound, offset) in sounds {
+            this.play_sound(ctx, &gain_source, sound, *offset);
+        }
+        this
+    }
+
+    fn pause(&self, ctx: &AudioContext) -> Vec<(AudioBuffer, f64)> {
+        self.playing
+            .iter()
+            .map(|(source, start_time)| {                                
+                source.stop().unwrap();
+                (source.buffer().unwrap(), ctx.current_time() - start_time)
+            })
+            .collect()
+    }
+
+    fn stop(&mut self) {
+        for (sound, _) in &mut self.playing {
+            sound.stop().unwrap();
+        }
+    }
+
+    async fn collect_dead_nodes(&mut self) {
+        while let Some(sound) = self.dead_nodes_recv.recv().await {
+            self.playing.retain(|(s, _)| s != &sound);
+        }
+    }
+
+    fn play_sound(&mut self, ctx: &AudioContext, gain_source: &ConstantSourceNode, sound: &AudioBuffer, offset: f64) {
         let gain = ctx.create_gain().unwrap();
         gain.connect_with_audio_node(&ctx.destination()).unwrap();
         gain_source.connect_with_audio_param(&gain.gain()).unwrap();
@@ -52,65 +99,68 @@ pub(crate) async fn sound_service(mut source: UnboundedReceiver<SoundCommand>) {
         source.connect_with_audio_node(&gain).unwrap();
         source.set_buffer(Some(sound));
         
-        {
-            let source = source.clone();
-            let source_nodes = source_nodes.clone();
-            let event = source.once::<webutil::event::Ended>();
-            source_nodes.set(&source, &(ctx.current_time() - offset).into());
-            wasm_bindgen_futures::spawn_local(async move {
-                event.await;
-                source_nodes.delete(&source);
-            });
-        }
         source.start_with_when_and_grain_offset(0.0, offset).unwrap();
+        let event = source.once::<webutil::event::Ended>();
+        self.playing.push((source.clone(), ctx.current_time() - offset));
+        let dead_nodes_send = self.dead_nodes_send.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            event.await;
+            // It's possible the responsible deleter has 
+            // been dropped, as stopping audio still fires
+            // the ended event, so failure is ignored.
+            drop(dead_nodes_send.send(source));
+        });
     }
+}
 
+pub(crate) async fn sound_service(mut source: UnboundedReceiver<SoundCommand>) {
     let gain_source = AUDIO_CONTEXT.with(|ctx| ctx.create_constant_source().unwrap());
     gain_source.start().unwrap();
 
-    let mut state = ServiceState::Playing(Map::new());
-    while let Some(cmd) = source.next().await {
-        AUDIO_CONTEXT.with(|ctx| {
-            match state {
-                ServiceState::Playing(ref source_nodes) => match cmd {
-                    SoundCommand::Play(ref sound) => play_sound(ctx, source_nodes, &gain_source, sound, 0.0),
-                    SoundCommand::Pause => {
-                        let source_nodes = source_nodes
-                            .entries()
-                            .into_iter()
-                            .map(|entry| {
-                                let entry: Array = entry
-                                    .unwrap().dyn_into().unwrap();
-                                let source: AudioBufferSourceNode =
-                                    entry.get(0).dyn_into().unwrap();
-                                let start_time = entry.get(1).as_f64().unwrap();
-                                
-                                source.stop().unwrap();
-                                (source.buffer().unwrap(), ctx.current_time() - start_time)
-                            })
-                            .collect();
-                        state = ServiceState::Paused(source_nodes);
-                    },
-                    SoundCommand::Resume => {},
-                    SoundCommand::Stop => for source in source_nodes.keys() {
-                        source.unwrap().dyn_into::<AudioBufferSourceNode>().unwrap().stop().unwrap();
-                    },
-                    SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume)
-                }
-                ServiceState::Paused(ref mut queued_sounds) => match cmd {
-                    SoundCommand::Play(sound) => queued_sounds.push((sound, 0.0)),
-                    SoundCommand::Pause => {},
-                    SoundCommand::Resume => {
-                        let source_nodes = Map::new();
-                        for (sound, offset) in queued_sounds {
-                            play_sound(ctx, &source_nodes, &gain_source, sound, *offset);
+    let mut state = ServiceState::Playing(SoundHandler::new());
+    loop {
+        match state {
+            ServiceState::Playing(ref mut sounds) => {
+                futures::select! {
+                    cmd = source.next() => if let Some(cmd) = cmd {
+                        match cmd {
+                            SoundCommand::Play(ref sound) => {
+                                AUDIO_CONTEXT.with(|ctx| {
+                                    sounds.play_sound(ctx, &gain_source, sound, 0.0);
+                                });
+                            },
+                            SoundCommand::Pause => {
+                                state = AUDIO_CONTEXT.with(|ctx| {
+                                    ServiceState::Paused(sounds.pause(ctx))
+                                });
+                            },
+                            SoundCommand::Resume => {},
+                            SoundCommand::Stop => sounds.stop(),
+                            SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume)
                         }
-                        state = ServiceState::Playing(source_nodes);
+                    } else {
+                        break;
                     },
-                    SoundCommand::Stop => queued_sounds.clear(),
-                    SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume)
+                    _ = sounds.collect_dead_nodes().fuse() => {}
                 }
             }
-        });
+            ServiceState::Paused(ref mut sounds) => {
+                if let Some(cmd) = source.next().await {
+                    match cmd {
+                        SoundCommand::Play(sound) => sounds.push((sound, 0.0)),
+                        SoundCommand::Pause => {},
+                        SoundCommand::Resume => {
+                            state = AUDIO_CONTEXT.with(|ctx| {
+                                ServiceState::Playing(SoundHandler::unpause(ctx, &gain_source, sounds))
+                            });
+                        },
+                        SoundCommand::Stop => sounds.clear(),
+                        SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume)
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
     }
 }
