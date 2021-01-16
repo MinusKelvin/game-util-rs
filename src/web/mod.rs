@@ -1,12 +1,12 @@
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::Blob;
+use js_sys::ArrayBuffer;
 
 pub mod glutil;
 pub mod sound;
 pub mod util;
 
-async fn load_blob(source: &str) -> Result<Blob, String> {
+async fn load_buffer(source: &str) -> Result<ArrayBuffer, String> {
     match JsFuture::from(web_sys::window().unwrap().fetch_with_str(source)).await {
         Ok(v) => {
             let response: web_sys::Response = v.dyn_into().unwrap();
@@ -17,12 +17,12 @@ async fn load_blob(source: &str) -> Result<Blob, String> {
                     response.status_text()
                 ));
             }
-            let blob = JsFuture::from(response.blob().unwrap())
+            let buffer = JsFuture::from(response.array_buffer().unwrap())
                 .await
                 .unwrap()
                 .dyn_into()
                 .unwrap();
-            Ok(blob)
+            Ok(buffer)
         }
         Err(_) => Err("fetch promise rejected".to_string()),
     }

@@ -114,7 +114,6 @@ impl LocalExecutor {
 }
 
 pub async fn load_binary(source: &str) -> Result<Vec<u8>, String> {
-    let blob = super::load_blob(source).await?;
-    let buffer = JsFuture::from(blob.array_buffer()).await.unwrap();
+    let buffer = super::load_buffer(source).await?;
     Ok(js_sys::Uint8Array::new(&buffer).to_vec())
 }

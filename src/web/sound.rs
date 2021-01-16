@@ -18,14 +18,7 @@ thread_local! {
 
 pub(crate) async fn load(source: &str) -> Result<InternalSound, String> {
     async fn load_(source: &str) -> Result<InternalSound, JsValue> {
-        let response: Response = JsFuture::from(web_sys::window().unwrap().fetch_with_str(source))
-            .await?
-            .dyn_into()
-            .unwrap();
-        let buffer: ArrayBuffer = JsFuture::from(response.array_buffer()?)
-            .await?
-            .dyn_into()
-            .unwrap();
+        let buffer = super::load_buffer(source).await?;
         let buffer = JsFuture::from(AUDIO_CONTEXT.with(|ctx| ctx.decode_audio_data(&buffer))?)
             .await?
             .dyn_into()
