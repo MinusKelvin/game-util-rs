@@ -1,12 +1,11 @@
-use wasm_bindgen::{JsValue, JsCast};
-use js_sys::{Error, ArrayBuffer};
-use web_sys::{AudioContext, AudioBuffer, AudioBufferSourceNode, ConstantSourceNode, Response};
-use wasm_bindgen_futures::JsFuture;
 use futures::channel::mpsc::UnboundedReceiver;
 use futures::FutureExt;
 use futures::StreamExt;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{AudioBuffer, AudioBufferSourceNode, AudioContext, ConstantSourceNode};
+use webutil::channel::{channel, Receiver, Sender};
 use webutil::event::EventTargetExt;
-use webutil::channel::{channel, Sender, Receiver};
 
 use crate::sound::SoundCommand;
 
@@ -17,26 +16,22 @@ thread_local! {
 }
 
 pub(crate) async fn load(source: &str) -> Result<InternalSound, String> {
-    async fn load_(source: &str) -> Result<InternalSound, JsValue> {
-        let buffer = super::load_buffer(source).await?;
-        let buffer = JsFuture::from(AUDIO_CONTEXT.with(|ctx| ctx.decode_audio_data(&buffer))?)
-            .await?
-            .dyn_into()
-            .unwrap();
-        Ok(buffer)
-    }
-    load_(source).await.map_err(|err: JsValue| err.dyn_into::<Error>().unwrap().to_string().into())
+    let buffer = super::load_buffer(source).await?;
+    JsFuture::from(AUDIO_CONTEXT.with(|ctx| ctx.decode_audio_data(&buffer).unwrap()))
+        .await
+        .map_err(super::js_err)
+        .map(|v| v.dyn_into().unwrap())
 }
 
 enum ServiceState {
     Playing(SoundHandler),
-    Paused(Vec<(AudioBuffer, f64)>)
+    Paused(Vec<(AudioBuffer, f64)>),
 }
 
 struct SoundHandler {
     playing: Vec<(AudioBufferSourceNode, f64)>,
     dead_nodes_send: Sender<AudioBufferSourceNode>,
-    dead_nodes_recv: Receiver<AudioBufferSourceNode> 
+    dead_nodes_recv: Receiver<AudioBufferSourceNode>,
 }
 
 impl SoundHandler {
@@ -45,11 +40,15 @@ impl SoundHandler {
         Self {
             playing: Vec::new(),
             dead_nodes_send,
-            dead_nodes_recv
+            dead_nodes_recv,
         }
     }
 
-    fn unpause(ctx: &AudioContext, gain_source: &ConstantSourceNode, sounds: &[(AudioBuffer, f64)]) -> Self {
+    fn unpause(
+        ctx: &AudioContext,
+        gain_source: &ConstantSourceNode,
+        sounds: &[(AudioBuffer, f64)],
+    ) -> Self {
         let mut this = SoundHandler::new();
         for (sound, offset) in sounds {
             this.play_sound(ctx, &gain_source, sound, *offset);
@@ -60,7 +59,7 @@ impl SoundHandler {
     fn pause(&self, ctx: &AudioContext) -> Vec<(AudioBuffer, f64)> {
         self.playing
             .iter()
-            .map(|(source, start_time)| {                                
+            .map(|(source, start_time)| {
                 source.stop().unwrap();
                 (source.buffer().unwrap(), ctx.current_time() - start_time)
             })
@@ -79,26 +78,31 @@ impl SoundHandler {
         }
     }
 
-    fn play_sound(&mut self, ctx: &AudioContext, gain_source: &ConstantSourceNode, sound: &AudioBuffer, offset: f64) {
+    fn play_sound(
+        &mut self,
+        ctx: &AudioContext,
+        gain_source: &ConstantSourceNode,
+        sound: &AudioBuffer,
+        offset: f64,
+    ) {
         let gain = ctx.create_gain().unwrap();
         gain.connect_with_audio_node(&ctx.destination()).unwrap();
         gain_source.connect_with_audio_param(&gain.gain()).unwrap();
 
-        let source: AudioBufferSourceNode = ctx
-            .create_buffer_source()
-            .unwrap()
-            .dyn_into()
-            .unwrap();
+        let source: AudioBufferSourceNode = ctx.create_buffer_source().unwrap().dyn_into().unwrap();
         source.connect_with_audio_node(&gain).unwrap();
         source.set_buffer(Some(sound));
-        
-        source.start_with_when_and_grain_offset(0.0, offset).unwrap();
+
+        source
+            .start_with_when_and_grain_offset(0.0, offset)
+            .unwrap();
         let event = source.once::<webutil::event::Ended>();
-        self.playing.push((source.clone(), ctx.current_time() - offset));
+        self.playing
+            .push((source.clone(), ctx.current_time() - offset));
         let dead_nodes_send = self.dead_nodes_send.clone();
         wasm_bindgen_futures::spawn_local(async move {
             event.await;
-            // It's possible the responsible deleter has 
+            // It's possible the responsible deleter has
             // been dropped, as stopping audio still fires
             // the ended event, so failure is ignored.
             drop(dead_nodes_send.send(source));
@@ -141,14 +145,18 @@ pub(crate) async fn sound_service(mut source: UnboundedReceiver<SoundCommand>) {
                 if let Some(cmd) = source.next().await {
                     match cmd {
                         SoundCommand::Play(sound) => sounds.push((sound, 0.0)),
-                        SoundCommand::Pause => {},
+                        SoundCommand::Pause => {}
                         SoundCommand::Resume => {
                             state = AUDIO_CONTEXT.with(|ctx| {
-                                ServiceState::Playing(SoundHandler::unpause(ctx, &gain_source, sounds))
+                                ServiceState::Playing(SoundHandler::unpause(
+                                    ctx,
+                                    &gain_source,
+                                    sounds,
+                                ))
                             });
-                        },
+                        }
                         SoundCommand::Stop => sounds.clear(),
-                        SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume)
+                        SoundCommand::SetVolume(volume) => gain_source.offset().set_value(volume),
                     }
                 } else {
                     break;

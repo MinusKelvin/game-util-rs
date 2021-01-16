@@ -3,7 +3,7 @@ use crate::prelude::*;
 
 use std::future::Future;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlElement;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;

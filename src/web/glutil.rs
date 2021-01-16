@@ -24,7 +24,9 @@ impl std::ops::Deref for Gl {
 async fn load_image(source: &str) -> Result<HtmlImageElement, String> {
     let image = HtmlImageElement::new().unwrap();
     image.set_src(source);
-    JsFuture::from(image.decode()).await.ok();
+    JsFuture::from(image.decode())
+        .await
+        .map_err(super::js_err)?;
     Ok(image)
 }
 
