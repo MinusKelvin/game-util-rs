@@ -63,6 +63,7 @@ pub fn launch<G, F>(
         game.container
             .append_with_node_1(&game.window.canvas())
             .unwrap();
+        game.window.canvas().focus();
 
         webutil::global::set_timeout(0, move || gameloop(el, game, ups, lockstep)).forget();
     });
