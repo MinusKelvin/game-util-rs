@@ -5,6 +5,7 @@ use futures::channel::oneshot;
 use futures::executor::{LocalPool, LocalSpawner};
 use futures::task::LocalSpawnExt;
 use glutin::{Api, GlRequest, PossiblyCurrent, WindowedContext};
+use serde::de::DeserializeOwned;
 use std::{future::Future, path::PathBuf};
 use winit::event::WindowEvent;
 use winit::event_loop::{EventLoop, EventLoopProxy};
@@ -103,4 +104,20 @@ pub async fn load_binary(source: &str) -> Result<Vec<u8>, String> {
     let path = PathBuf::from(source);
     std::thread::spawn(|| s.send(std::fs::read(path).map_err(|e| e.to_string())));
     r.await.unwrap()
+}
+
+pub fn store<T: Serialize>(key: &str, value: &T) -> Result<(), String> {
+    let to = std::io::BufWriter::new(
+        std::fs::File::create(format!("{}.dat", key)).map_err(|e| e.to_string())?,
+    );
+    bincode::serialize_into(to, &value).map_err(|e| e.to_string())
+}
+
+pub fn load<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
+    let from = match std::fs::File::open(format!("{}.dat", key)) {
+        Ok(f) => std::io::BufReader::new(f),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string())
+    };
+    bincode::deserialize_from(from).map_err(|e| e.to_string()).map(Some)
 }

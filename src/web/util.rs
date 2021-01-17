@@ -1,7 +1,11 @@
 use crate::gameloop::*;
 use crate::prelude::*;
 
+use bincode::Options;
+use js_sys::JsString;
+use serde::de::DeserializeOwned;
 use std::future::Future;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlElement;
@@ -117,4 +121,49 @@ impl LocalExecutor {
 pub async fn load_binary(source: &str) -> Result<Vec<u8>, String> {
     let buffer = super::load_buffer(source).await?;
     Ok(js_sys::Uint8Array::new(&buffer).to_vec())
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(catch, js_namespace = localStorage, js_name = getItem)]
+    fn get_item(key: &str) -> Result<Option<JsString>, JsValue>;
+
+    #[wasm_bindgen(catch, js_namespace = localStorage, js_name = setItem)]
+    fn set_item(key: &str, value: &JsString) -> Result<(), JsValue>;
+}
+
+pub fn store<T: Serialize>(key: &str, value: &T) -> Result<(), String> {
+    let mut serialized = bincode::serialize(value).map_err(|e| e.to_string())?;
+    if serialized.len() % 2 != 0 {
+        serialized.push(0);
+    }
+    if serialized.len() > 5 * 1024 * 1024 {
+        web_sys::console::warn_1(&JsValue::from_str(&format!(
+            "Local storage object '{}' exceeds 5 MB",
+            key
+        )));
+    }
+    let value = JsString::from_char_code(unsafe {
+        // View the even-length [u8] as a [u16].
+        // This is little-endian because wasm32 is little-endian.
+        std::slice::from_raw_parts(serialized.as_ptr() as *const _, serialized.len() / 2)
+    });
+    set_item(key, &value).map_err(super::js_err)
+}
+
+pub fn load<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
+    let data = match get_item(key) {
+        Ok(Some(v)) => v.iter().collect::<Vec<_>>(),
+        Ok(None) => return Ok(None),
+        Err(e) => return Err(super::js_err(e)),
+    };
+    let data = unsafe {
+        // View the [u16] as a [u8].
+        // This is little-endian because wasm32 is little-endian.
+        std::slice::from_raw_parts(data.as_ptr() as *const _, data.len() * 2)
+    };
+    bincode::options()
+        .allow_trailing_bytes()
+        .deserialize(data)
+        .map_err(|e| e.to_string())
 }
