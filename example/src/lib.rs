@@ -1,9 +1,10 @@
 use game_util::prelude::*;
 use game_util::rusttype::Font;
+use game_util::sound::{Sound, SoundService};
 use game_util::sprite::SpriteBatch;
 use game_util::text::{Alignment, TextRenderer};
 use game_util::winit::dpi::PhysicalSize;
-use game_util::winit::event::WindowEvent;
+use game_util::winit::event::{ElementState, MouseButton, WindowEvent};
 use game_util::winit::window::{WindowBuilder, WindowId};
 use game_util::GameloopCommand;
 use instant::Instant;
@@ -23,6 +24,8 @@ struct Game {
     mouse_in_window: bool,
     sprites: sprites::Sprites,
     sprite_renderer: SpriteBatch,
+    pluck: Sound,
+    sound_service: SoundService,
 }
 
 impl game_util::Game for Game {
@@ -127,10 +130,18 @@ impl game_util::Game for Game {
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.dpi = scale_factor,
             WindowEvent::CursorMoved { position, .. } => {
-                self.mouse_pos = point2(position.x as f32, self.psize.height as f32 - position.y as f32)
+                self.mouse_pos = point2(
+                    position.x as f32,
+                    self.psize.height as f32 - position.y as f32,
+                )
             }
             WindowEvent::CursorLeft { .. } => self.mouse_in_window = false,
             WindowEvent::CursorEntered { .. } => self.mouse_in_window = true,
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state: ElementState::Pressed,
+                ..
+            } => self.sound_service.play(&self.pluck),
             _ => {}
         }
         GameloopCommand::Continue
@@ -168,7 +179,7 @@ pub fn main() {
                         .ok();
                 });
 
-                let (noto_sans, (sprites, sprite_tex)) = game_util::futures_util::join!(
+                let (noto_sans, (sprites, sprite_tex), pluck) = game_util::futures::join!(
                     async {
                         Font::try_from_vec(
                             game_util::load_binary("res/NotoSans-Regular.ttf")
@@ -177,7 +188,8 @@ pub fn main() {
                         )
                         .unwrap()
                     },
-                    async { sprites::Sprites::load(&gl, "res/generated").await.unwrap() }
+                    async { sprites::Sprites::load(&gl, "res/generated").await.unwrap() },
+                    async { Sound::load("res/pluck.ogg").await.unwrap() }
                 );
 
                 let center = point2(psize.width as f32, psize.height as f32) / 2.0;
@@ -205,6 +217,8 @@ pub fn main() {
                     )
                     .unwrap(),
                     gl,
+                    pluck,
+                    sound_service: SoundService::new(&executor),
                 }
             }
         },
