@@ -117,7 +117,9 @@ pub fn load<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
     let from = match std::fs::File::open(format!("{}.dat", key)) {
         Ok(f) => std::io::BufReader::new(f),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string())
+        Err(e) => return Err(e.to_string()),
     };
-    bincode::deserialize_from(from).map_err(|e| e.to_string()).map(Some)
+    bincode::deserialize_from(from)
+        .map_err(|e| e.to_string())
+        .map(Some)
 }

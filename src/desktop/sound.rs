@@ -95,9 +95,9 @@ pub(crate) async fn sound_service(mut source: UnboundedReceiver<SoundCommand>) {
                     sound_send = s;
                     sink.append(Mixer {
                         active: vec![],
-                        incoming
+                        incoming,
                     });
-                },
+                }
                 SoundCommand::SetVolume(volume) => sink.set_volume(volume),
             }
         }
