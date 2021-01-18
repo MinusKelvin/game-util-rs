@@ -13,7 +13,7 @@ use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::{EventLoop, EventLoopProxy};
 use winit::platform::web::WindowExtWebSys;
-use winit::window::{Window, WindowBuilder, WindowId};
+use winit::window::{Window, WindowBuilder};
 
 pub fn launch<G, F>(
     wb: WindowBuilder,
@@ -73,7 +73,7 @@ pub fn launch<G, F>(
     });
 }
 
-struct GamePlatformWrapper<G: Game> {
+pub(crate) struct GamePlatformWrapper<G: Game> {
     game: G,
     container: HtmlElement,
     window: Window,
@@ -84,31 +84,27 @@ pub struct LocalExecutor {
     _private: (),
 }
 
-impl<G: Game> Game for GamePlatformWrapper<G> {
-    type UserEvent = G::UserEvent;
-
-    fn update(&mut self) -> GameloopCommand {
-        self.game.update()
+impl<G: Game> GamePlatformWrapper<G> {
+    pub(crate) fn update(&mut self) -> GameloopCommand {
+        self.game.update(&self.window)
     }
 
-    fn render(&mut self, alpha: f64, smooth_delta: f64) {
-        self.game.render(alpha, smooth_delta);
+    pub(crate) fn render(&mut self, alpha: f64, smooth_delta: f64) {
+        self.game.render(&self.window, alpha, smooth_delta);
     }
 
-    fn event(&mut self, event: WindowEvent, window: WindowId) -> GameloopCommand {
-        self.game.event(event, window)
+    pub(crate) fn event(&mut self, event: WindowEvent) -> GameloopCommand {
+        self.game.event(&self.window, event)
     }
 
-    fn user_event(&mut self, event: G::UserEvent) -> GameloopCommand {
-        self.game.user_event(event)
+    pub(crate) fn user_event(&mut self, event: G::UserEvent) -> GameloopCommand {
+        self.game.user_event(&self.window, event)
     }
 
-    fn begin_frame(&mut self) {
+    pub(crate) fn begin_frame(&mut self) {
         let w = self.container.client_width();
         let h = self.container.client_height();
         self.window.set_inner_size(LogicalSize::new(w, h));
-
-        self.game.begin_frame()
     }
 }
 

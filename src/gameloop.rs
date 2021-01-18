@@ -1,17 +1,15 @@
 use instant::{Duration, Instant};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowId;
+use winit::window::Window;
 
 pub trait Game {
     type UserEvent;
 
-    fn update(&mut self) -> GameloopCommand;
-    fn render(&mut self, alpha: f64, smooth_delta: f64);
-    fn event(&mut self, event: WindowEvent, window: WindowId) -> GameloopCommand;
-    fn user_event(&mut self, event: Self::UserEvent) -> GameloopCommand;
-
-    fn begin_frame(&mut self) {}
+    fn update(&mut self, window: &Window) -> GameloopCommand;
+    fn render(&mut self, window: &Window, alpha: f64, smooth_delta: f64);
+    fn event(&mut self, window: &Window, event: WindowEvent) -> GameloopCommand;
+    fn user_event(&mut self, window: &Window, event: Self::UserEvent) -> GameloopCommand;
 }
 
 pub enum GameloopCommand {
@@ -32,7 +30,7 @@ pub enum GameloopCommand {
 /// gameplay at the cost of slight drift over time.
 pub(crate) fn gameloop<G: Game + 'static>(
     el: EventLoop<G::UserEvent>,
-    mut game: G,
+    mut game: crate::GamePlatformWrapper<G>,
     mut ups: f64,
     lockstep: bool,
 ) -> ! {
@@ -51,8 +49,8 @@ pub(crate) fn gameloop<G: Game + 'static>(
 
             game.begin_frame();
         }
-        Event::WindowEvent { event, window_id } => {
-            let command = game.event(event, window_id);
+        Event::WindowEvent { event, .. } => {
+            let command = game.event(event);
             if process_command(command, &mut paused, &mut ups, &mut alpha) {
                 *flow = ControlFlow::Exit;
             }

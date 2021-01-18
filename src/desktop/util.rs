@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use std::{future::Future, path::PathBuf};
 use winit::event::WindowEvent;
 use winit::event_loop::{EventLoop, EventLoopProxy};
-use winit::window::{Window, WindowBuilder, WindowId};
+use winit::window::{Window, WindowBuilder};
 
 pub fn launch<G, F>(
     wb: WindowBuilder,
@@ -52,7 +52,7 @@ pub fn launch<G, F>(
     gameloop(el, game, ups, lockstep);
 }
 
-struct GamePlatformWrapper<G: Game> {
+pub(crate) struct GamePlatformWrapper<G> {
     game: G,
     context: WindowedContext<PossiblyCurrent>,
     pool: LocalPool,
@@ -63,33 +63,30 @@ pub struct LocalExecutor {
     spawner: LocalSpawner,
 }
 
-impl<G: Game> Game for GamePlatformWrapper<G> {
-    type UserEvent = G::UserEvent;
-
-    fn update(&mut self) -> GameloopCommand {
-        self.game.update()
+impl<G: Game> GamePlatformWrapper<G> {
+    pub(crate) fn update(&mut self) -> GameloopCommand {
+        self.game.update(self.context.window())
     }
 
-    fn render(&mut self, alpha: f64, smooth_delta: f64) {
-        self.game.render(alpha, smooth_delta);
+    pub(crate) fn render(&mut self, alpha: f64, smooth_delta: f64) {
+        self.game.render(self.context.window(), alpha, smooth_delta);
         self.pool.run_until_stalled();
         self.context.swap_buffers().unwrap();
     }
 
-    fn event(&mut self, event: WindowEvent, window: WindowId) -> GameloopCommand {
+    pub(crate) fn event(&mut self, event: WindowEvent) -> GameloopCommand {
         if let WindowEvent::Resized(size) = event {
             self.context.resize(size);
         }
-        self.game.event(event, window)
+        self.game.event(self.context.window(), event)
     }
 
-    fn user_event(&mut self, event: G::UserEvent) -> GameloopCommand {
-        self.game.user_event(event)
+    pub(crate) fn user_event(&mut self, event: G::UserEvent) -> GameloopCommand {
+        self.game.user_event(self.context.window(), event)
     }
 
-    fn begin_frame(&mut self) {
+    pub(crate) fn begin_frame(&mut self) {
         self.pool.run_until_stalled();
-        self.game.begin_frame()
     }
 }
 

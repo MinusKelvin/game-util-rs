@@ -5,7 +5,7 @@ use game_util::sprite::SpriteBatch;
 use game_util::text::{Alignment, TextRenderer};
 use game_util::winit::dpi::PhysicalSize;
 use game_util::winit::event::{ElementState, MouseButton, WindowEvent};
-use game_util::winit::window::{WindowBuilder, WindowId};
+use game_util::winit::window::{WindowBuilder, Window};
 use game_util::GameloopCommand;
 use instant::Instant;
 
@@ -31,7 +31,7 @@ struct Game {
 impl game_util::Game for Game {
     type UserEvent = game_util::rusttype::Font<'static>;
 
-    fn update(&mut self) -> GameloopCommand {
+    fn update(&mut self, _: &Window) -> GameloopCommand {
         self.ball_prev_pos = self.ball_pos;
         if self.mouse_in_window {
             self.ball_vel += (self.mouse_pos - self.ball_pos) * 0.01;
@@ -45,7 +45,7 @@ impl game_util::Game for Game {
         GameloopCommand::Continue
     }
 
-    fn render(&mut self, alpha: f64, smooth_delta: f64) {
+    fn render(&mut self, _: &Window, alpha: f64, smooth_delta: f64) {
         let lsize = self.psize.to_logical::<f64>(self.dpi);
         self.text.dpi = self.dpi as f32;
         self.text.screen_size = (lsize.width as f32, lsize.height as f32);
@@ -122,7 +122,7 @@ impl game_util::Game for Game {
         self.text.render();
     }
 
-    fn event(&mut self, event: WindowEvent, _: WindowId) -> GameloopCommand {
+    fn event(&mut self, _: &Window, event: WindowEvent) -> GameloopCommand {
         match event {
             WindowEvent::CloseRequested => return GameloopCommand::Exit,
             WindowEvent::Resized(new_size) => {
@@ -147,7 +147,7 @@ impl game_util::Game for Game {
         GameloopCommand::Continue
     }
 
-    fn user_event(&mut self, font: Self::UserEvent) -> GameloopCommand {
+    fn user_event(&mut self, _: &Window, font: Self::UserEvent) -> GameloopCommand {
         self.text.add_fallback_font(0, font);
         GameloopCommand::Continue
     }
