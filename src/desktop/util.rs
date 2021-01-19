@@ -103,20 +103,32 @@ pub async fn load_binary(source: &str) -> Result<Vec<u8>, String> {
     r.await.unwrap()
 }
 
-pub fn store<T: Serialize>(key: &str, value: &T) -> Result<(), String> {
+pub fn store<T: Serialize>(key: &str, value: &T, human_readable: bool) -> Result<(), String> {
+    let extension = if human_readable { "yaml" } else { "dat" };
     let to = std::io::BufWriter::new(
-        std::fs::File::create(format!("{}.dat", key)).map_err(|e| e.to_string())?,
+        std::fs::File::create(format!("{}.{}", key, extension)).map_err(|e| e.to_string())?,
     );
-    bincode::serialize_into(to, &value).map_err(|e| e.to_string())
+    if human_readable {
+        serde_yaml::to_writer(to, value).map_err(|e| e.to_string())
+    } else {
+        bincode::serialize_into(to, &value).map_err(|e| e.to_string())
+    }
 }
 
-pub fn load<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
-    let from = match std::fs::File::open(format!("{}.dat", key)) {
+pub fn load<T: DeserializeOwned>(key: &str, human_readable: bool) -> Result<Option<T>, String> {
+    let extension = if human_readable { "yaml" } else { "dat" };
+    let from = match std::fs::File::open(format!("{}.{}", key, extension)) {
         Ok(f) => std::io::BufReader::new(f),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
     };
-    bincode::deserialize_from(from)
-        .map_err(|e| e.to_string())
-        .map(Some)
+    if human_readable {
+        serde_yaml::from_reader(from)
+            .map_err(|e| e.to_string())
+            .map(Some)
+    } else {
+        bincode::deserialize_from(from)
+            .map_err(|e| e.to_string())
+            .map(Some)
+    }
 }

@@ -128,7 +128,7 @@ extern "C" {
     fn set_item(key: &str, value: &JsString) -> Result<(), JsValue>;
 }
 
-pub fn store<T: Serialize>(key: &str, value: &T) -> Result<(), String> {
+pub fn store<T: Serialize>(key: &str, value: &T, human_readable: bool) -> Result<(), String> {
     let mut serialized = bincode::serialize(value).map_err(|e| e.to_string())?;
     if serialized.len() % 2 != 0 {
         serialized.push(0);
@@ -147,7 +147,7 @@ pub fn store<T: Serialize>(key: &str, value: &T) -> Result<(), String> {
     set_item(key, &value).map_err(super::js_err)
 }
 
-pub fn load<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
+pub fn load<T: DeserializeOwned>(key: &str, human_readable: bool) -> Result<Option<T>, String> {
     let data = match get_item(key) {
         Ok(Some(v)) => v.iter().collect::<Vec<_>>(),
         Ok(None) => return Ok(None),
