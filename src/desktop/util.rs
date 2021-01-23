@@ -24,7 +24,7 @@ pub fn launch<G, F>(
 
     let context = glutin::ContextBuilder::new()
         .with_vsync(true)
-        .with_gl(GlRequest::Specific(Api::OpenGlEs, (3, 0)))
+        .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
         .build_windowed(wb.with_visible(false), &el)
         .unwrap();
 
