@@ -6,6 +6,7 @@ pub extern crate winit;
 
 mod gameloop;
 pub mod glutil;
+pub mod shape;
 pub mod sound;
 pub mod sprite;
 pub mod text;
@@ -17,6 +18,7 @@ mod backend;
 
 pub use backend::util::*;
 pub use gameloop::*;
+pub use lyon_tessellation::path;
 
 pub mod prelude {
     pub use arrayvec::{ArrayString, ArrayVec};

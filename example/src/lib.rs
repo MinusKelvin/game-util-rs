@@ -1,11 +1,13 @@
+use game_util::path::Path;
 use game_util::prelude::*;
 use game_util::rusttype::Font;
+use game_util::shape::ShapeRenderer;
 use game_util::sound::{Sound, SoundService};
 use game_util::sprite::SpriteBatch;
 use game_util::text::{Alignment, TextRenderer};
 use game_util::winit::dpi::PhysicalSize;
 use game_util::winit::event::{ElementState, MouseButton, WindowEvent};
-use game_util::winit::window::{WindowBuilder, Window};
+use game_util::winit::window::{Window, WindowBuilder};
 use game_util::GameloopCommand;
 use instant::Instant;
 
@@ -24,6 +26,7 @@ struct Game {
     mouse_in_window: bool,
     sprites: sprites::Sprites,
     sprite_renderer: SpriteBatch,
+    shape_renderer: ShapeRenderer,
     pluck: Sound,
     sound_service: SoundService,
 }
@@ -49,12 +52,19 @@ impl game_util::Game for Game {
         let lsize = self.psize.to_logical::<f64>(self.dpi);
         self.text.dpi = self.dpi as f32;
         self.text.screen_size = (lsize.width as f32, lsize.height as f32);
+        self.shape_renderer.pixels_per_unit = self.dpi as f32;
 
-        self.sprite_renderer.draw(
-            &self.sprites.ball,
-            self.ball_prev_pos.lerp(self.ball_pos, alpha as f32),
-            [255; 4],
-        );
+        let ball_pos = self.ball_prev_pos.lerp(self.ball_pos, alpha as f32);
+        self.sprite_renderer
+            .draw(&self.sprites.ball, ball_pos, [255; 4]);
+
+        let mut path_builder = Path::builder();
+        path_builder.begin(ball_pos);
+        path_builder.line_to(self.mouse_pos);
+        path_builder.end(false);
+        self.shape_renderer
+            .stroke_path(&path_builder.build(), 3.0, [0, 0, 0, 255])
+            .unwrap();
 
         self.text.draw_text(
             &format!(
@@ -110,14 +120,17 @@ impl game_util::Game for Game {
                 .blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
         }
 
-        self.sprite_renderer.render(Transform3D::ortho(
+        let camera = Transform3D::ortho(
             0.0,
             self.psize.width as f32,
             0.0,
             self.psize.height as f32,
             -1.0,
             1.0,
-        ));
+        );
+
+        self.sprite_renderer.render(camera);
+        self.shape_renderer.render(camera);
 
         self.text.render();
     }
@@ -216,6 +229,8 @@ pub fn main() {
                         sprite_tex,
                     )
                     .unwrap(),
+                    shape_renderer: ShapeRenderer::new(&gl, game_util::shape::shape_shader(&gl))
+                        .unwrap(),
                     gl,
                     pluck,
                     sound_service: SoundService::new(&executor),
