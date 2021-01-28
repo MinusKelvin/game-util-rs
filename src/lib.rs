@@ -18,7 +18,6 @@ mod backend;
 
 pub use backend::util::*;
 pub use gameloop::*;
-pub use lyon_tessellation::path;
 
 pub mod prelude {
     pub use arrayvec::{ArrayString, ArrayVec};

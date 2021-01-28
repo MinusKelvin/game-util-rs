@@ -16,7 +16,6 @@ lazy_static = "1.4"
 instant = "0.1"
 futures = "0.3"
 bincode = "1.3"
-lyon_tessellation = "0.17"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 glutin = "0.26"

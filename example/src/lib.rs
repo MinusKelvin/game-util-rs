@@ -1,4 +1,3 @@
-use game_util::path::Path;
 use game_util::prelude::*;
 use game_util::rusttype::Font;
 use game_util::shape::ShapeRenderer;
@@ -58,13 +57,10 @@ impl game_util::Game for Game {
         self.sprite_renderer
             .draw(&self.sprites.ball, ball_pos, [255; 4]);
 
-        let mut path_builder = Path::builder();
-        path_builder.begin(ball_pos);
-        path_builder.line_to(self.mouse_pos);
-        path_builder.end(false);
-        self.shape_renderer
-            .stroke_path(&path_builder.build(), 3.0, [0, 0, 0, 255])
-            .unwrap();
+        if self.mouse_in_window {
+            self.shape_renderer
+                .line(ball_pos, self.mouse_pos, 3.0, [0, 0, 0, 255]);
+        }
 
         self.text.draw_text(
             &format!(

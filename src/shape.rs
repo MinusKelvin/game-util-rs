@@ -1,15 +1,10 @@
 use crate::prelude::*;
 
-use lyon_tessellation::path::Path;
-use lyon_tessellation::{
-    BuffersBuilder, FillOptions, FillTessellator, FillVertex, StrokeOptions, StrokeTessellator,
-    StrokeVertex, TessellationError, VertexBuffers,
-};
-
 pub struct ShapeRenderer {
     pub pixels_per_unit: f32,
     gl: Gl,
-    buffers: VertexBuffers<ShapeVertex, u32>,
+    vertices: Vec<ShapeVertex>,
+    indices: Vec<u32>,
     vbo: glow::Buffer,
     ibo: glow::Buffer,
     shader: glow::Program,
@@ -27,7 +22,8 @@ impl ShapeRenderer {
         Ok(ShapeRenderer {
             pixels_per_unit: 1.0,
             gl: gl.clone(),
-            buffers: VertexBuffers::new(),
+            vertices: vec![],
+            indices: vec![],
             vbo,
             ibo,
             shader,
@@ -35,44 +31,38 @@ impl ShapeRenderer {
         })
     }
 
-    pub fn fill_path(&mut self, path: &Path, color: [u8; 4]) -> Result<(), TessellationError> {
-        let mut builder =
-            BuffersBuilder::new(&mut self.buffers, |vertex: FillVertex| ShapeVertex {
-                pos: vertex.position(),
-                color,
-            });
-
-        let mut tessellator = FillTessellator::new();
-        tessellator.tessellate_path(
-            path,
-            &FillOptions::tolerance(self.pixels_per_unit * FillOptions::DEFAULT_TOLERANCE),
-            &mut builder,
-        )?;
-
-        Ok(())
+    pub fn convex_polygon(&mut self, points: &[Point2<f32>], color: [u8; 4]) {
+        assert!(points.len() >= 3);
+        let zero_index = self.vertices.len() as u32;
+        self.vertices
+            .extend(points.iter().map(|&pos| ShapeVertex { pos, color }));
+        self.indices.reserve((points.len() - 2) * 3);
+        for i in 2..points.len() as u32 {
+            self.indices.push(zero_index);
+            self.indices.push(zero_index + i - 1);
+            self.indices.push(zero_index + i);
+        }
     }
 
-    pub fn stroke_path(
-        &mut self,
-        path: &Path,
-        thickness: f32,
-        color: [u8; 4],
-    ) -> Result<(), TessellationError> {
-        let mut builder =
-            BuffersBuilder::new(&mut self.buffers, |vertex: StrokeVertex| ShapeVertex {
-                pos: vertex.position(),
-                color: color,
-            });
+    pub fn rectangle(&mut self, rect: Rect<f32>, color: [u8; 4]) {
+        self.convex_polygon(
+            &[
+                rect.min(),
+                point2(rect.min_x(), rect.max_y()),
+                rect.max(),
+                point2(rect.max_x(), rect.min_y()),
+            ],
+            color,
+        )
+    }
 
-        let mut tessellator = StrokeTessellator::new();
-        tessellator.tessellate_path(
-            path,
-            &StrokeOptions::tolerance(self.pixels_per_unit * StrokeOptions::DEFAULT_TOLERANCE)
-                .with_line_width(thickness),
-            &mut builder,
-        )?;
-
-        Ok(())
+    pub fn line(&mut self, from: Point2<f32>, to: Point2<f32>, thickness: f32, color: [u8; 4]) {
+        let direction = (to - from).normalize();
+        let normal = vec2(-direction.y, direction.x) * thickness / 2.0;
+        self.convex_polygon(
+            &[from - normal, from + normal, to + normal, to - normal],
+            color,
+        )
     }
 
     /// Actually draws the queued shapes.
@@ -87,14 +77,14 @@ impl ShapeRenderer {
             self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.vbo));
             self.gl.buffer_data_u8_slice(
                 glow::ARRAY_BUFFER,
-                glutil::as_u8_slice(&self.buffers.vertices),
+                glutil::as_u8_slice(&self.vertices),
                 glow::STREAM_DRAW,
             );
             self.gl
                 .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.ibo));
             self.gl.buffer_data_u8_slice(
                 glow::ELEMENT_ARRAY_BUFFER,
-                glutil::as_u8_slice(&self.buffers.indices),
+                glutil::as_u8_slice(&self.indices),
                 glow::STREAM_DRAW,
             );
 
@@ -112,7 +102,7 @@ impl ShapeRenderer {
 
             self.gl.draw_elements(
                 glow::TRIANGLES,
-                self.buffers.indices.len() as i32,
+                self.indices.len() as i32,
                 glow::UNSIGNED_INT,
                 0,
             );
@@ -120,8 +110,8 @@ impl ShapeRenderer {
             self.gl.disable_vertex_attrib_array(0);
             self.gl.disable_vertex_attrib_array(1);
         }
-        self.buffers.indices.clear();
-        self.buffers.vertices.clear();
+        self.indices.clear();
+        self.vertices.clear();
     }
 }
 
