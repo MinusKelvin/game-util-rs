@@ -176,7 +176,10 @@ fn process_dir(
                 Some(i) => format!("{}[{}]", name, i),
                 None => name.clone(),
             };
-            let data = process_img(packer, &key, &entry.path());
+            let data = match process_img(packer, &key, &entry.path()) {
+                Some(v) => v,
+                None => continue,
+            };
 
             if let Some(i) = array {
                 let v = entries.entry(name.clone()).or_insert(Kind::Array(vec![]));
@@ -239,8 +242,8 @@ fn process_name(parent_name: Option<&str>, name: &str) -> (String, Option<usize>
     }
 }
 
-fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Path) -> Data {
-    let mut img = ImageImporter::import_from_file(path).unwrap().to_rgba8();
+fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Path) -> Option<Data> {
+    let mut img = ImageImporter::import_from_file(path).ok()?.to_rgba8();
 
     let width = img.width();
     let height = img.height();
@@ -350,5 +353,5 @@ fn process_img(packer: &mut MultiTexturePacker<RgbaImage>, key: &str, path: &Pat
         data.tex.w -= 1;
     }
 
-    data
+    Some(data)
 }
