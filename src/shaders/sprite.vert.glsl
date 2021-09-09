@@ -1,5 +1,3 @@
-#version 300 es
-
 layout(location = 0) in vec2 pos;
 layout(location = 1) in vec3 tex;
 layout(location = 2) in vec4 color;

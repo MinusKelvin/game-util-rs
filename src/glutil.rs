@@ -17,9 +17,23 @@ pub fn compile_shader_program(
 }
 
 pub fn compile_shader(gl: &Gl, shader_type: u32, code: &str) -> Result<glow::Shader, String> {
+    let mut patched_code = String::new();
+    #[cfg(not(target_arch = "wasm32"))]
+    patched_code.push_str("#version 330 core\n");
+    #[cfg(target_arch = "wasm32")]
+    {
+        patched_code.push_str("#version 300 es\n");
+        if shader_type == glow::FRAGMENT_SHADER {
+            patched_code.push_str("precision mediump float;\n");
+            patched_code.push_str("precision lowp sampler2DArray;\n");
+            patched_code.push_str("precision highp usampler2D;\n");
+        }
+    }
+    patched_code.push_str(code);
+
     unsafe {
         let shader = gl.create_shader(shader_type)?;
-        gl.shader_source(shader, code);
+        gl.shader_source(shader, &patched_code);
         gl.compile_shader(shader);
 
         if !gl.get_shader_compile_status(shader) {

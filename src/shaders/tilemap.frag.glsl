@@ -1,8 +1,3 @@
-#version 300 es
-precision mediump float;
-precision highp usampler2D;
-precision lowp sampler2DArray;
-
 in vec2 coord;
 
 uniform ivec2 tilemapSize;

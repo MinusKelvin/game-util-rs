@@ -1,7 +1,3 @@
-#version 300 es
-precision mediump float;
-precision lowp sampler2DArray;
-
 in vec3 texcoord;
 in vec4 col;
 

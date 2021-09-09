@@ -1,5 +1,3 @@
-#version 300 es
-
 uniform vec2 size;
 uniform vec2 offset;
 uniform mat4 proj;
