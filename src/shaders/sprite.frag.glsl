@@ -1,3 +1,8 @@
+#ifdef GL_ES
+precision mediump float;
+precision lowp sampler2DArray;
+#endif
+
 in vec3 texcoord;
 in vec4 col;
 

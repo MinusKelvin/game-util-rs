@@ -1,3 +1,9 @@
+#ifdef GL_ES
+precision mediump float;
+precision highp usampler2D;
+precision lowp sampler2DArray;
+#endif
+
 in vec2 coord;
 
 uniform ivec2 tilemapSize;

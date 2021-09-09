@@ -1,3 +1,7 @@
+#ifdef GL_ES
+precision lowp float;
+#endif
+
 in vec2 texcoord;
 in vec4 col;
 
