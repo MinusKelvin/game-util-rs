@@ -25,8 +25,15 @@ pub fn launch<G, F>(
     let context = glutin::ContextBuilder::new()
         .with_vsync(true)
         .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
-        .build_windowed(wb.with_visible(false), &el)
-        .unwrap();
+        .build_windowed(wb.with_visible(false), &el);
+    let context = match context {
+        Ok(v) => v,
+        Err(e) => {
+            let content = format!("{}", e);
+            let _ = msgbox::create("Error in Initialization", &content, msgbox::IconType::Error);
+            std::process::exit(1)
+        }
+    };
 
     let context = unsafe { context.make_current() }.unwrap();
 
